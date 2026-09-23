@@ -210,6 +210,20 @@ td select{min-height:36px;border:1px solid var(--border);border-radius:8px;backg
 .toast{position:fixed;bottom:max(18px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;z-index:60;opacity:0;transition:opacity .2s var(--ease),transform .4s var(--ease-out);pointer-events:none;max-width:calc(100% - 24px);box-shadow:var(--shadow-lg)}
 .toast.show{opacity:1;transform:translateX(-50%)}
 .hidden{display:none!important}
+/* هيكل التحميل: نفس شكل الكرت حتى ما تقفز الصفحة لما توصل البيانات */
+.skel{pointer-events:none;box-shadow:var(--shadow-card)}
+.skel i{display:block;height:10px;border-radius:5px;background:var(--col);margin:6px 0}
+.skel i:nth-child(1){width:30%}.skel i:nth-child(2){width:75%;height:13px}.skel i:nth-child(3){width:50%}
+.stat.skel i:nth-child(1){width:45%}.stat.skel i:nth-child(2){width:30%;height:18px}
+@media (prefers-reduced-motion:no-preference){.skel i{animation:pulse 1.4s ease-in-out infinite}}
+@keyframes pulse{50%{opacity:.45}}
+.busy{cursor:progress}
+/* الأجهزة اللمسية: كل هدف 44px على الأقل */
+@media (pointer:coarse){
+  .btn,.btn.sm,.tab,.chk,.toggle,.toolbar select,.page-head input,.page-head select,.add-c input{min-height:44px}
+  .icon-btn{width:44px;height:44px}
+  .role-chk{min-height:36px;padding-inline:12px}
+}
 /* رابط التخطي: يظهر بس لمستخدم الكيبورد أول ما يضغط Tab */
 .skip{position:fixed;top:-60px;inset-inline-start:8px;z-index:70;background:var(--primary);color:var(--primary-fg);padding:10px 14px;border-radius:8px;font-weight:600;text-decoration:none}
 .skip:focus-visible{top:8px}

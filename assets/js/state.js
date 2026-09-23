@@ -9,6 +9,7 @@ export const S = {
   PROFITS: {},        // invoice_id → {total, gross_pct, net_pct}
   COSTS: {},          // للأدمن فقط: invoice_id → cost
   drawerId: null,
+  loaded: false,      // أول تحميل للطلبات خلص؟
   lastMissing: null,
 };
 

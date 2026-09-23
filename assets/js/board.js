@@ -44,8 +44,19 @@ function cardHTML(inv) {
     </div></button>`;
 }
 
+// هيكل رمادي مكان الكروت لحد ما توصل البيانات، بدل "لا توجد طلبات" الغلط
+const skel = n => '<div class="card skel" aria-hidden="true"><i></i><i></i><i></i></div>'.repeat(n);
+
 export function renderBoard() {
   if (!S.ME) return;
+  if (!S.loaded) {
+    $('#board').setAttribute('aria-busy', 'true');
+    $('#board').innerHTML = COLS.map((c, i) => `<section class="column"><div class="col-head"><span class="dot" style="background:${c.c}"></span><h2>${c.t}</h2></div>
+      <div class="col-body">${skel([3, 2, 2, 1, 1][i])}</div></section>`).join('');
+    $('#stats').innerHTML = '<div class="stat skel" aria-hidden="true"><i></i><i></i></div>'.repeat(4);
+    return;
+  }
+  $('#board').removeAttribute('aria-busy');
   const list = filtered();
   $('#board').innerHTML = COLS.map(c => {
     const items = list.filter(i => i.stage === c.k).sort((a, b) => ageLevel(b) - ageLevel(a) || new Date(a.stage_at) - new Date(b.stage_at));

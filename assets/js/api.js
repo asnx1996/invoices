@@ -30,6 +30,7 @@ const invoiceQuery = () => {
 
 export async function loadInvoices() {
   try { S.INVOICES = await fetchAll(invoiceQuery) } catch (e) { toast(e.message) }
+  S.loaded = true;
   await loadProfits();
   changed();
 }

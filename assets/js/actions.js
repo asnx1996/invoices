@@ -33,10 +33,21 @@ export function missingTerms(inv) {
   return m;
 }
 
+let inFlight = false;
 async function step(fn, args, okMsg, id) {
-  const r = await rpc(fn, args, okMsg);
-  if (r.ok) { S.lastMissing = null; await refreshInvoice(id) }
-  return r;
+  if (inFlight) return { ok: false }; // ضغطتين سريعة ما تنفذ الإجراء مرتين
+  inFlight = true;
+  const box = document.querySelector('#drawer .actions');
+  if (box) { box.classList.add('busy'); box.setAttribute('aria-busy', 'true') }
+  try {
+    const r = await rpc(fn, args, okMsg);
+    if (r.ok) { S.lastMissing = null; await refreshInvoice(id) }
+    return r;
+  } finally {
+    inFlight = false;
+    const b = document.querySelector('#drawer .actions');
+    if (b) { b.classList.remove('busy'); b.removeAttribute('aria-busy') }
+  }
 }
 
 async function deleteInvoice(inv) {

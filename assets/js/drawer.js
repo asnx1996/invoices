@@ -9,10 +9,15 @@ import { run, waitingOn, missingBasic, missingTerms } from './actions.js';
 let extra = { comments: [], log: [], pdfUrl: null, costEdit: false };
 let returnFocus = null;
 
-export async function openDrawer(id) {
+export async function openDrawer(id, push = true) {
+  const wasOpen = !!S.drawerId;
   S.drawerId = id; extra = { comments: [], log: [], pdfUrl: null, costEdit: false };
   renderDrawer();
   if (S.drawerId !== id) return; // الطلب مو موجود
+  // الطلب إله رابط يتشارك، وزر الرجوع بالموبايل يسكّر الدرج بدل ما يطلع من الموقع
+  const st = { ...(history.state || {}), drawer: id };
+  if (push && !wasOpen) history.pushState(st, '', '#inv-' + id);
+  else history.replaceState(st, '', '#inv-' + id);
   const d = $('#drawer');
   if (!d.classList.contains('open')) {
     // نافذة: الخلفية تصير inert، والتركيز ينتقل للدرج ويرجع لمكانه عند الإغلاق
@@ -30,7 +35,13 @@ export async function openDrawer(id) {
   if (S.drawerId === id) renderDrawer();
 }
 
+// الإغلاق يمر من التاريخ (history) حتى يبقى متطابق مع زر الرجوع؛ popstate يستدعي hideDrawer
 export function closeDrawer() {
+  if (S.drawerId && history.state && history.state.drawer) { history.back(); return }
+  hideDrawer();
+}
+
+export function hideDrawer() {
   const id = S.drawerId;
   S.drawerId = null; S.lastMissing = null;
   const d = $('#drawer');
