@@ -7,11 +7,19 @@ import { can } from './can.js';
 import { run, waitingOn, missingBasic, missingTerms } from './actions.js';
 
 let extra = { comments: [], log: [], pdfUrl: null, costEdit: false };
+let returnFocus = null;
 
 export async function openDrawer(id) {
   S.drawerId = id; extra = { comments: [], log: [], pdfUrl: null, costEdit: false };
   renderDrawer();
-  $('#drawer').classList.add('open'); $('#scrim').classList.add('open'); $('#drawer').setAttribute('aria-hidden', 'false');
+  if (S.drawerId !== id) return; // الطلب مو موجود
+  const d = $('#drawer');
+  if (!d.classList.contains('open')) {
+    // نافذة: الخلفية تصير inert، والتركيز ينتقل للدرج ويرجع لمكانه عند الإغلاق
+    returnFocus = document.activeElement;
+    d.classList.add('open'); $('#scrim').classList.add('open'); d.inert = false; $('#appView').inert = true;
+    d.querySelector('.close').focus({ preventScroll: true });
+  }
   const [c, l] = await Promise.all([
     sb.from('invoice_comments').select('*').eq('invoice_id', id).order('at'),
     sb.from('invoice_log').select('*').eq('invoice_id', id).order('at'),
@@ -23,8 +31,15 @@ export async function openDrawer(id) {
 }
 
 export function closeDrawer() {
+  const id = S.drawerId;
   S.drawerId = null; S.lastMissing = null;
-  $('#drawer').classList.remove('open'); $('#scrim').classList.remove('open'); $('#drawer').setAttribute('aria-hidden', 'true');
+  const d = $('#drawer');
+  if (!d.classList.contains('open')) return;
+  d.classList.remove('open'); $('#scrim').classList.remove('open'); d.inert = true; $('#appView').inert = false;
+  // الكارت ممكن انرسم من جديد، فندور عليه بالرقم
+  const back = returnFocus && returnFocus.isConnected ? returnFocus : (id != null && document.querySelector(`.card[data-id="${id}"]`));
+  if (back) back.focus({ preventScroll: true });
+  returnFocus = null;
 }
 
 async function reloadLog() {

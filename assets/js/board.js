@@ -78,8 +78,12 @@ function renderStats(list) {
     const n = S.INVOICES.filter(i => i.delete_req_at).length;
     if (n) tiles.push(['طلبات حذف', n, 'اضغط للعرض', 'del']);
   }
-  $('#stats').innerHTML = tiles.map(s => `<div class="stat${s[3] ? ' click' : ''}" ${s[3] ? `data-stat="${s[3]}" role="button" tabindex="0"` : ''}>
-    <div class="k">${s[0]}</div><div class="v">${s[1]}</div><div class="s">${s[2]}</div></div>`).join('');
+  // البطاقات اللي تفلتر أزرار حقيقية (كيبورد + قارئ الشاشة يعرف إذا الفلتر شغال)
+  const on = { late: $('#fLate').checked, del: $('#fDel').checked };
+  $('#stats').innerHTML = tiles.map(s => {
+    const inner = `<span class="k">${s[0]}</span><span class="v">${s[1]}</span><span class="s">${s[2]}</span>`;
+    return s[3] ? `<button type="button" class="stat click" data-stat="${s[3]}" aria-pressed="${on[s[3]]}">${inner}</button>` : `<div class="stat">${inner}</div>`;
+  }).join('');
 }
 
 export function fillFilters() {

@@ -16,7 +16,7 @@ export const genPw = () => { const c = 'abcdefghjkmnpqrstuvwxyz23456789', a = ne
 export const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms) } };
 
 let tt;
-export function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => t.classList.remove('show'), 3500) }
+export function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => t.classList.remove('show'), Math.max(3500, String(m).length * 90)) } // الرسائل الطويلة تبقى وقت يكفي لقراءتها
 
 // نافذة إدخال عامة. أنواع الحقول: text | password | number | date | textarea | select (opts: HTML) | checks (opts: {k: label})
 export function ask(title, fields, cb, { okText = 'تأكيد' } = {}) {

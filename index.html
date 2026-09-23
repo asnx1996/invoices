@@ -57,20 +57,21 @@
 
 <!-- التطبيق -->
 <div id="appView" class="hidden">
+<a class="skip" href="#viewBoard" id="skipLink">تخطّى إلى المحتوى</a>
 <header>
   <div class="bar">
-    <div class="brand"><div class="logo"><svg class="i"><use href="#ic-board"/></svg></div>فواتير المبيعات</div>
-    <nav class="tabs" role="tablist">
-      <button class="tab" role="tab" data-view="board" aria-selected="true">اللوحة</button>
-      <button class="tab hidden" role="tab" data-view="reports" aria-selected="false" id="tabReports">التقارير</button>
-      <button class="tab hidden" role="tab" data-view="customers" aria-selected="false" id="tabCustomers">الزبائن</button>
-      <button class="tab hidden" role="tab" data-view="users" aria-selected="false" id="tabUsers">المستخدمين</button>
+    <h1 class="brand"><span class="logo" aria-hidden="true"><svg class="i"><use href="#ic-board"/></svg></span>فواتير المبيعات</h1>
+    <nav class="tabs" aria-label="الأقسام">
+      <button class="tab" data-view="board" aria-current="page">اللوحة</button>
+      <button class="tab hidden" data-view="reports" id="tabReports">التقارير</button>
+      <button class="tab hidden" data-view="customers" id="tabCustomers">الزبائن</button>
+      <button class="tab hidden" data-view="users" id="tabUsers">المستخدمين</button>
     </nav>
     <div class="spacer"></div>
     <button class="btn sm hidden" id="installBtn"><svg class="i"><use href="#ic-download"/></svg>تثبيت التطبيق</button>
     <div class="who"><span id="meName" style="font-weight:600"></span><span class="role-pill" id="rolePill"></span></div>
     <button class="icon-btn" id="pwBtn" aria-label="تغيير رمزي" title="تغيير رمزي"><svg class="i"><use href="#ic-key"/></svg></button>
-    <button class="icon-btn" id="themeBtn" aria-label="الوضع الليلي" title="الوضع الليلي"><svg class="i"><use href="#ic-moon"/></svg></button>
+    <button class="icon-btn" id="themeBtn" aria-label="الوضع الليلي" title="الوضع الليلي" aria-pressed="false"><svg class="i"><use href="#ic-moon"/></svg></button>
     <button class="icon-btn" id="outBtn" aria-label="خروج" title="خروج"><svg class="i"><use href="#ic-back"/></svg></button>
   </div>
   <div class="toolbar" id="toolbar">
@@ -90,12 +91,12 @@
   </div>
 </header>
 
-<main id="viewBoard">
+<main tabindex="-1" id="viewBoard">
   <div class="stats" id="stats"></div>
   <div class="board-wrap"><div class="board" id="board"></div></div>
 </main>
 
-<main id="viewReports" class="hidden">
+<main tabindex="-1" id="viewReports" class="hidden">
   <div class="page wide">
     <div class="page-head">
       <h3>التقارير</h3>
@@ -108,7 +109,7 @@
   </div>
 </main>
 
-<main id="viewCustomers" class="hidden">
+<main tabindex="-1" id="viewCustomers" class="hidden">
   <div class="page wide">
     <div class="panel">
       <div class="page-head">
@@ -126,7 +127,7 @@
   </div>
 </main>
 
-<main id="viewUsers" class="hidden">
+<main tabindex="-1" id="viewUsers" class="hidden">
   <div class="page wide">
     <div class="panel">
       <div class="page-head">
@@ -146,7 +147,7 @@
 </div>
 
 <div class="scrim" id="scrim"></div>
-<aside class="drawer" id="drawer" aria-hidden="true" role="dialog" aria-label="تفاصيل الطلب"></aside>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="تفاصيل الطلب" inert></aside>
 
 <dialog id="modal"><form method="dialog" id="mForm">
   <div class="m-head" id="mTitle"></div>

@@ -16,7 +16,8 @@ let view = 'board';
 function show(v) {
   if (v !== 'board' && !can(v)) v = 'board';
   view = v;
-  $$('.tab').forEach(t => t.setAttribute('aria-selected', t.dataset.view === v));
+  $$('.tab').forEach(t => t.dataset.view === v ? t.setAttribute('aria-current', 'page') : t.removeAttribute('aria-current'));
+  $('#skipLink').setAttribute('href', VIEWS[v]);
   Object.entries(VIEWS).forEach(([k, sel]) => $(sel).classList.toggle('hidden', k !== v));
   $('#toolbar').classList.toggle('hidden', v !== 'board');
   if (v === 'users') renderUsers();
@@ -56,12 +57,18 @@ $('#newBtn').onclick = async () => {
 // الوضع الليلي
 $('#themeBtn').onclick = () => {
   const r = document.documentElement, dark = r.dataset.theme ? r.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
-  const next = dark ? 'light' : 'dark', flip = () => { r.dataset.theme = next };
-  // تلاشي ناعم بين الوضعين بدل قفزة إضاءة مفاجئة
-  if (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) document.startViewTransition(flip); else flip();
+  const next = dark ? 'light' : 'dark';
+  // نوقف الانتقالات لحظة التبديل حتى الألوان تتبدل مرة وحدة بدل ما تتلطخ عنصر عنصر
+  r.classList.add('no-trans'); r.dataset.theme = next; syncThemeBtn();
+  void r.offsetHeight; requestAnimationFrame(() => r.classList.remove('no-trans'));
   try { localStorage.setItem('ib_theme', next) } catch (e) { }
 };
+function syncThemeBtn() {
+  const r = document.documentElement;
+  $('#themeBtn').setAttribute('aria-pressed', r.dataset.theme ? r.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches);
+}
 try { const th = localStorage.getItem('ib_theme'); if (th) document.documentElement.dataset.theme = th } catch (e) { }
+syncThemeBtn();
 
 initBoard(); initDrawer(); initUsers(); initCustomers(); initReports(); initExport();
 initAuth(onReady);
