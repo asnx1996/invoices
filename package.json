@@ -1,0 +1,11 @@
+{
+  "name": "invoices",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node tests/run-db-tests.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8"
+  }
+}

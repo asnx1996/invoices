@@ -1,0 +1,267 @@
+import { S, COLS, SUB, PAY, PAY_LEGACY, PAYER, PAYER_LEGACY, MONTHS, POINT_RATE, hasRole, getInv, userName, reps, isActive,
+  ldAmount, transportAdded, totalAfterTransport, pointsPct, onChange } from './state.js';
+import { renderBoard } from './board.js';
+import { $, esc, num, fmt, money, pct, dt, dOnly, ic, toast } from './util.js';
+import { sb, rpc, refreshInvoice } from './api.js';
+import { can } from './can.js';
+import { run, waitingOn, missingBasic, missingTerms } from './actions.js';
+
+let extra = { comments: [], log: [], pdfUrl: null, costEdit: false };
+
+export async function openDrawer(id) {
+  S.drawerId = id; extra = { comments: [], log: [], pdfUrl: null, costEdit: false };
+  renderDrawer();
+  $('#drawer').classList.add('open'); $('#scrim').classList.add('open'); $('#drawer').setAttribute('aria-hidden', 'false');
+  const [c, l] = await Promise.all([
+    sb.from('invoice_comments').select('*').eq('invoice_id', id).order('at'),
+    sb.from('invoice_log').select('*').eq('invoice_id', id).order('at'),
+  ]);
+  extra.comments = c.data || []; extra.log = l.data || [];
+  const inv = getInv(id);
+  if (inv && inv.pdf_path) { const { data } = await sb.storage.from('invoices').createSignedUrl(inv.pdf_path, 3600); extra.pdfUrl = data && data.signedUrl }
+  if (S.drawerId === id) renderDrawer();
+}
+
+export function closeDrawer() {
+  S.drawerId = null; S.lastMissing = null;
+  $('#drawer').classList.remove('open'); $('#scrim').classList.remove('open'); $('#drawer').setAttribute('aria-hidden', 'true');
+}
+
+async function reloadLog() {
+  const { data } = await sb.from('invoice_log').select('*').eq('invoice_id', S.drawerId).order('at');
+  extra.log = data || [];
+}
+
+// ---------- مكونات الحقول ----------
+function fld(label, col, val, { type = 'text', req = false, dis = false, full = false, opts = null, help = '', rer = false, list = '' } = {}) {
+  const id = 'f_' + col; let input;
+  if (opts) input = `<select id="${id}" data-f="${col}" ${rer ? 'data-rer="1"' : ''} ${dis ? 'disabled' : ''}><option value="">— اختر —</option>${Object.entries(opts).map(([k, v]) => `<option value="${esc(k)}" ${String(val) === String(k) ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select>`;
+  else if (type === 'textarea') input = `<textarea id="${id}" data-f="${col}" ${dis ? 'disabled' : ''}>${esc(val)}</textarea>`;
+  else input = `<input type="${type}" id="${id}" data-f="${col}" value="${esc(val ?? '')}" ${dis ? 'disabled' : ''} ${type === 'number' ? 'min="0" step="any" inputmode="decimal"' : ''} ${rer ? 'data-rer="1"' : ''} ${list ? `list="${list}"` : ''}>`;
+  return `<div class="fld ${full ? 'full' : ''}"><label for="${id}">${label}${req ? ' <span class="req">*</span>' : ''}</label>${input}${help ? `<div class="help">${help}</div>` : ''}</div>`;
+}
+const tog = (label, col, val, dis) => `<label class="toggle" for="f_${col}"><input type="checkbox" id="f_${col}" data-f="${col}" data-rer="1" ${val ? 'checked' : ''} ${dis ? 'disabled' : ''}>${label}</label>`;
+const filled = v => String(v ?? '').trim() !== '';
+
+function stepsHTML(inv) {
+  const seq = [['new', 'طلب'], ['acc', 'حسابات'], ['mgr', 'المدير'], ['cust', 'الزبون'], ['wh', 'المخزن'], ['done', 'تمت']];
+  if (inv.stage === 'cancel') return `<div class="steps">${seq.map(s => `<div class="step cancel"><div class="ln"></div>${s[1]}</div>`).join('')}</div>`;
+  const pos = inv.stage === 'new' ? 0 : inv.stage === 'acc' ? 1 : inv.stage === 'done' ? 5 : { mgr: 2, cust: 3, wh: 4 }[inv.sub];
+  return `<div class="steps">${seq.map((s, i) => `<div class="step ${i < pos || inv.stage === 'done' ? 'done' : i === pos ? 'cur' : ''}"><div class="ln"></div>${s[1]}</div>`).join('')}</div>`;
+}
+
+function deleteReqHTML(inv) {
+  if (!inv.delete_req_at) return '';
+  const btn = (a, label, cls) => can(a, inv) ? `<button class="btn sm ${cls}" data-act="${a}">${label}</button>` : '';
+  const mine = inv.delete_req_by === S.ME.id;
+  return `<div class="warnbox">${ic('trash')} <b>طلب حذف</b> من ${esc(userName(inv.delete_req_by))} — ${dOnly(inv.delete_req_at)}<br>السبب: ${esc(inv.delete_req_reason)}
+    <div class="row">${btn('delete', 'حذف نهائي', 'bad')}${hasRole('admin') ? btn('cancelDeleteReq', mine ? 'إلغاء الطلب' : 'رفض طلب الحذف', '') : mine ? btn('cancelDeleteReq', 'إلغاء طلبي', '') : ''}</div></div>`;
+}
+
+function actionsHTML(inv) {
+  const btn = (a, label, cls = '', icn = '') => can(a, inv) ? `<button class="btn ${cls}" data-act="${a}">${icn ? ic(icn) : ''}${label}</button>` : '';
+  const btns = [btn('sendToAcc', 'إرسال للحسابات', 'primary', 'check'), btn('sendToDecision', 'إرسال للقرار', 'primary', 'check'),
+    btn('approve', 'موافقة على الشروط', 'ok', 'check'), btn('returnToAcc', 'إرجاع للحسابات', 'bad', 'back'),
+    btn('custAccept', 'الزبون موافق', 'ok', 'check'), btn('custRefuse', 'الزبون رفض', 'bad', 'x'),
+    btn('complete', 'تحويل لمبيعات + رقم المبيعات', 'ok', 'check')].join('');
+  const small = [btn('requestDelete', 'طلب حذف', 'bad sm', 'trash'), inv.delete_req_at ? '' : btn('delete', 'حذف', 'bad sm', 'trash')].join('');
+  let wait;
+  if (inv.stage === 'done') wait = `تمت برقم مبيعات <b>${esc(inv.sales_no)}</b> — ${dOnly(inv.closed_at)}`;
+  else if (inv.stage === 'cancel') wait = `ملغاة: ${esc(inv.cancel_reason)}`;
+  else wait = 'الخطوة الحالية: ' + esc(waitingOn(inv));
+  const miss = S.lastMissing && S.lastMissing.id === inv.id ? `<div class="missing">حقول ناقصة:<ul>${S.lastMissing.list.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
+  return `${deleteReqHTML(inv)}<div class="actions"><div class="wait">${ic('clock')}<span>${wait}</span></div>
+    ${btns ? `<div class="row">${btns}</div>` : `<div class="help">${isActive(inv) ? 'ما عندك إجراء بهذه المرحلة.' : ''}</div>`}
+    ${small ? `<div class="row" style="margin-top:8px">${small}</div>` : ''}${miss}</div>`;
+}
+
+function customerFld(inv, dis) {
+  if (dis) return `<div class="fld full"><label>اسم الزبون</label><input type="text" value="${esc(inv.customer)}" disabled></div>`;
+  const warn = !inv.customer_id ? `<div class="help" style="color:var(--bad)">${filled(inv.customer) ? 'الاسم مو من القائمة — ' : ''}اختار الزبون من القائمة</div>` : '<div class="help">اكتب جزء من الاسم واختار من القائمة</div>';
+  return `<div class="fld full"><label for="f_customer_pick">اسم الزبون <span class="req">*</span></label>
+    <input type="search" id="f_customer_pick" list="custList" value="${esc(inv.customer)}" autocomplete="off" placeholder="ابحث عن الزبون...">
+    <datalist id="custList">${S.CUSTOMERS.filter(c => c.active).map(c => `<option value="${esc(c.name)}">`).join('')}</datalist>${warn}</div>`;
+}
+
+function costFld(inv) {
+  if (!can('setCost', inv)) return '';
+  if (hasRole('admin')) return fld('سعر الكلفة (د.ع) — للأدمن فقط', 'cost', S.COSTS[inv.id] ?? '', { type: 'number', req: true, help: 'ما يظهر لأي أحد غيرك' }).replace('data-f="cost"', 'data-cost="1"');
+  if (inv.cost_set && !extra.costEdit)
+    return `<div class="fld"><label>سعر الكلفة</label><div class="cost-set">${ic('check')}مسجّل (مخفي) <button class="btn sm" data-costedit="1">تغيير</button></div></div>`;
+  return fld('سعر الكلفة (د.ع)', 'cost', '', { type: 'number', req: true, help: 'بعد الحفظ يختفي ومحد يشوفه غير الأدمن' }).replace('data-f="cost"', 'data-cost="1"');
+}
+
+function termsHTML(inv) {
+  const et = !can('editTerms', inv);
+  const payOpts = { ...PAY, ...(PAY_LEGACY[inv.payment] ? { [inv.payment]: PAY_LEGACY[inv.payment] } : {}) };
+  const payerOpts = { ...PAYER, ...(PAYER_LEGACY[inv.payer] ? { [inv.payer]: PAYER_LEGACY[inv.payer] } : {}) };
+  const tr = transportAdded(inv);
+  return `<section class="blk"><h4>السداد والتوصيل ${et ? `<span class="lock">${ic('lock')}يعدلها المحاسب</span>` : ''}</h4>
+    <div class="grid">
+      ${fld('طريقة السداد', 'payment', inv.payment, { opts: payOpts, req: true, dis: et, rer: true })}
+      ${inv.payment === 'credit' ? fld('مدة الآجل', 'credit_months', inv.credit_months, { opts: MONTHS, req: true, dis: et, rer: true }) : '<div></div>'}
+      ${fld('التوصيل', 'payer', inv.payer, { opts: payerOpts, req: true, dis: et, rer: true })}
+      ${inv.payer === 'customer' ? fld('أجور النقل (د.ع)', 'transport_amt', inv.transport_amt, { type: 'number', req: true, dis: et, rer: true, help: 'تنضاف على قيمة الفاتورة' }) : '<div></div>'}
+      <div class="fld full"><div class="help">الإجمالي بعد النقل: <b>${money(totalAfterTransport(inv))}</b>${tr ? ` (${money(inv.value)} + ${money(tr)})` : ''}</div></div>
+      ${fld('أجور التفريغ/التحميل (د.ع)', 'unload_amt', inv.unload_amt, { type: 'number', dis: et })}
+      ${fld('عدد النقاط', 'points', inv.points, { type: 'number', dis: et, rer: true, help: `نسبة النقاط: ${fmt(pointsPct(inv))}% (النقطة = ${POINT_RATE}%)` })}
+      ${costFld(inv)}
+      <div class="term-box">${tog('خصم لاحق', 'ld', inv.ld, et)}
+        ${inv.ld ? `<div class="grid">${fld('نسبة الخصم %', 'ld_pct', inv.ld_pct, { type: 'number', req: true, dis: et, rer: true })}
+          <div class="fld"><div class="help" style="margin-top:28px">مبلغ الخصم: <b>${money(ldAmount(inv))}</b></div></div></div>` : ''}</div>
+      ${fld('ملاحظات', 'notes', inv.notes, { type: 'textarea', dis: et, full: true })}
+    </div></section>`;
+}
+
+function profitHTML(inv) {
+  if (!can('seeProfit', inv)) return '';
+  const p = S.PROFITS[inv.id];
+  if (!p) return `<section class="blk"><h4>الربح</h4><div class="help">${inv.cost_set ? 'جاري الحساب...' : 'ما انكتب سعر الكلفة بعد'}</div></section>`;
+  const ld = inv.ld ? num(inv.ld_pct) : 0, pts = pointsPct(inv), net = num(p.net_pct);
+  return `<section class="blk"><h4>الربح <span class="lock">${ic('lock')}للأدمن والمدير</span></h4>
+    <div class="profit"><table>
+      <tr><td>الإجمالي بعد النقل</td><td>${money(p.total)}</td></tr>
+      ${hasRole('admin') && S.COSTS[inv.id] != null ? `<tr><td>سعر الكلفة</td><td>${money(S.COSTS[inv.id])}</td></tr>` : ''}
+      <tr><td>الربح (1 − الكلفة ÷ الإجمالي)</td><td>${pct(p.gross_pct)}</td></tr>
+      <tr><td>− الخصم اللاحق</td><td>${pct(ld)}</td></tr>
+      <tr><td>− النقاط (${fmt(inv.points)} × ${POINT_RATE})</td><td>${pct(pts)}</td></tr>
+      <tr class="net"><td><b>صافي الربح</b></td><td class="${net >= 0 ? 'pos' : 'neg'}">${pct(net)}</td></tr>
+    </table></div></section>`;
+}
+
+export function renderDrawer() {
+  const inv = getInv(S.drawerId); if (!inv) return closeDrawer();
+  const eb = !can('editBasic', inv);
+  const col = COLS.find(c => c.k === inv.stage);
+  // نحافظ على مكان التمرير والحقل المحدد بعد إعادة الرسم
+  const body = $('#drawer .d-body'), scroll = body ? body.scrollTop : 0;
+  const act = document.activeElement, focusId = act && $('#drawer').contains(act) ? act.id : null;
+  const qDis = eb || (filled(inv.res_no) && !filled(inv.quote_no));
+  const rDis = eb || (filled(inv.quote_no) && !filled(inv.res_no));
+  $('#drawer').innerHTML = `
+  <div class="d-head">
+    <div style="flex:1;min-width:0">
+      <div class="sub">#${inv.id} · ${esc(userName(inv.rep_id))} · ${dOnly(inv.created_at)}</div>
+      <h3>${esc(inv.customer) || 'طلب جديد'}</h3>
+      <span class="badge" style="background:var(--surface-2);color:${col.c};border:1px solid var(--border)">${col.t}${inv.stage === 'decision' ? ' · ' + SUB[inv.sub] : ''}</span>
+    </div>
+    <button class="icon-btn close" aria-label="إغلاق">${ic('x')}</button>
+  </div>
+  <div class="d-body">
+    ${stepsHTML(inv)}${actionsHTML(inv)}
+    ${profitHTML(inv)}
+    <section class="blk"><h4>بيانات الطلب ${eb ? `<span class="lock">${ic('lock')}للعرض فقط</span>` : ''}</h4>
+      <div class="grid">
+        ${customerFld(inv, eb)}
+        ${fld('رقم عرض السعر', 'quote_no', inv.quote_no, { dis: qDis })}
+        ${fld('رقم الحجز', 'res_no', inv.res_no, { dis: rDis, help: 'واحد منهم فقط' })}
+        ${fld('قيمة الفاتورة (د.ع)', 'value', inv.value, { type: 'number', req: true, dis: eb, rer: true })}
+        ${hasRole('admin') && inv.stage === 'new' ? fld('المندوب', 'rep_id', inv.rep_id, { opts: Object.fromEntries(reps().map(r => [r.id, r.full_name])), rer: true }) : `<div class="fld"><label>المندوب</label><input type="text" value="${esc(userName(inv.rep_id))}" disabled></div>`}
+        <div class="fld full"><label>ملف الفاتورة PDF <span class="req">*</span></label>
+          <div class="pdf">${ic('file')}<span class="name">${inv.pdf_path ? esc(inv.pdf_name || 'ملف') + ' · ' + Math.round((inv.pdf_size || 0) / 1024) + ' KB' : '<span style="color:var(--faint)">ما مرفوع ملف</span>'}</span>
+          ${extra.pdfUrl ? `<a class="btn sm" href="${esc(extra.pdfUrl)}" target="_blank" rel="noopener noreferrer">فتح</a>` : ''}
+          ${!eb ? `<label class="btn sm" for="pdfIn">${inv.pdf_path ? 'تغيير' : 'رفع'}</label><input type="file" id="pdfIn" accept="application/pdf" class="hidden">` : ''}</div>
+          <div class="help">الحد الأقصى 2 MB</div></div>
+      </div></section>
+    ${can('seeTerms', inv) ? termsHTML(inv) : ''}
+    <section class="blk"><h4>التعليقات</h4>
+      ${extra.comments.map(c => `<div class="comment ${c.is_system ? 'sys' : ''}"><div class="by">${esc(userName(c.author))} · ${dt(c.at)}</div>${esc(c.body)}</div>`).join('') || '<div class="help" style="margin-bottom:8px">لا توجد تعليقات</div>'}
+      <div class="add-c"><input type="text" id="cIn" placeholder="اكتب تعليق..." aria-label="تعليق"><button class="btn primary" id="cBtn">إرسال</button></div></section>
+    <section class="blk"><h4>سجل الحركة</h4>
+      <ul class="timeline">${extra.log.slice().reverse().map(l => `<li><div>${esc(userName(l.actor))}: ${esc(l.body)}</div><div class="t">${dt(l.at)}</div></li>`).join('') || '<li class="help">—</li>'}</ul></section>
+  </div>`;
+  $('#drawer .d-body').scrollTop = scroll;
+  if (focusId) { const f = document.getElementById(focusId); if (f && !f.disabled) f.focus({ preventScroll: true }) }
+}
+
+async function addComment() {
+  const v = $('#cIn').value.trim(); if (!v) return;
+  const { error } = await sb.from('invoice_comments').insert({ invoice_id: S.drawerId, body: v });
+  if (error) return toast(error.message);
+  const { data } = await sb.from('invoice_comments').select('*').eq('invoice_id', S.drawerId).order('at');
+  extra.comments = data || []; renderDrawer();
+}
+
+async function save(inv, patch, rerender) {
+  const { error } = await sb.from('invoices').update(patch).eq('id', inv.id);
+  if (error) { toast(error.message); renderDrawer(); return false }
+  Object.assign(inv, patch);
+  if (S.lastMissing && S.lastMissing.id === inv.id) {
+    S.lastMissing.list = (inv.stage === 'new' ? missingBasic : missingTerms)(inv);
+    if (!S.lastMissing.list.length) S.lastMissing = null;
+  }
+  await reloadLog();
+  if (S.PROFITS[inv.id]) await refreshInvoice(inv.id);   // الربح يتغير ويا القيمة/النقل/النقاط
+  else renderBoard();
+  if (rerender) renderDrawer();
+  return true;
+}
+
+async function uploadPdf(inv, f) {
+  if (f.type !== 'application/pdf') return toast('الملف لازم PDF');
+  if (f.size > 2 * 1024 * 1024) return toast('الحجم أكثر من 2 MB');
+  const path = `${inv.id}/${Date.now()}-${f.name.replace(/[^\w.\-]/g, '_')}`;
+  toast('جاري الرفع...');
+  const up = await sb.storage.from('invoices').upload(path, f, { contentType: 'application/pdf' });
+  if (up.error) return toast(up.error.message);
+  const old = inv.pdf_path;
+  if (!await save(inv, { pdf_path: path, pdf_name: f.name, pdf_size: f.size })) return;
+  if (old) await sb.storage.from('invoices').remove([old]);
+  openDrawer(inv.id); toast('انرفع الملف');
+}
+
+export function initDrawer() {
+  $('#scrim').onclick = closeDrawer;
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.drawerId && !$('#modal').open) closeDrawer() });
+  onChange(() => { if (S.drawerId) renderDrawer() });
+
+  const d = $('#drawer');
+  d.addEventListener('click', e => {
+    if (e.target.closest('.close')) return closeDrawer();
+    const a = e.target.closest('[data-act]'); if (a) return run(a.dataset.act, S.drawerId);
+    if (e.target.closest('[data-costedit]')) { extra.costEdit = true; renderDrawer(); setTimeout(() => { const c = $('#f_cost'); c && c.focus() }, 30); return }
+    if (e.target.closest('#cBtn')) addComment();
+  });
+  d.addEventListener('keydown', e => { if (e.target.id === 'cIn' && e.key === 'Enter') { e.preventDefault(); addComment() } });
+
+  // رقم عرض السعر ورقم الحجز: إذا انكتب واحد، الثاني يتقفل
+  d.addEventListener('input', e => {
+    const pair = { f_quote_no: 'f_res_no', f_res_no: 'f_quote_no' }[e.target.id];
+    if (!pair) return;
+    const inv = getInv(S.drawerId); if (!inv || !can('editBasic', inv)) return;
+    const other = $('#' + pair);
+    other.disabled = filled(e.target.value) && !filled(other.value);
+  });
+
+  d.addEventListener('change', async e => {
+    const el = e.target, inv = getInv(S.drawerId); if (!inv) return;
+    if (el.id === 'pdfIn') { const f = el.files[0]; if (f) uploadPdf(inv, f); return }
+
+    if (el.id === 'f_customer_pick') {
+      const name = el.value.trim().toLowerCase();
+      const c = S.CUSTOMERS.find(x => x.active && x.name.trim().toLowerCase() === name);
+      if (!c) { toast('الزبون مو موجود بالقائمة. اختار من القائمة أو راجع الأدمن'); el.value = inv.customer || ''; return }
+      if (c.id !== inv.customer_id) await save(inv, { customer_id: c.id, customer: c.name }, true);
+      return;
+    }
+
+    if (el.dataset.cost) {
+      const v = num(el.value); if (v <= 0) return toast('سعر الكلفة لازم أكبر من صفر');
+      const r = await rpc('inv_set_cost', { p_id: inv.id, p_cost: v }, 'انحفظ سعر الكلفة');
+      if (r.ok) { extra.costEdit = false; await reloadLog(); await refreshInvoice(inv.id) }
+      return;
+    }
+
+    const col = el.dataset.f; if (!col) return;
+    let val = el.type === 'checkbox' ? el.checked : el.value;
+    if (val === '') val = null;
+    if (['value', 'transport_amt', 'unload_amt', 'ld_pct', 'points', 'credit_months'].includes(col)) val = val === null ? null : num(val);
+    if (col === 'points' && val === null) val = 0;
+    const patch = { [col]: val };
+    // تنظيف الحقول التابعة
+    if (col === 'payment' && val !== 'credit') patch.credit_months = null;
+    if (col === 'payer' && val !== 'customer') patch.transport_amt = 0;
+    if (col === 'ld' && !val) patch.ld_pct = null;
+    await save(inv, patch, !!el.dataset.rer || Object.keys(patch).length > 1);
+  });
+}
