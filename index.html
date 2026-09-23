@@ -150,7 +150,7 @@ section.blk h4{margin:0 0 10px;font-size:14px;color:var(--muted);display:flex;al
 .fld.full{grid-column:1/-1}
 .fld label{font-size:13px;font-weight:500;color:var(--muted)}
 .fld label .req{color:var(--bad)}
-.fld input[type=text],.fld input[type=number],.fld input[type=date],.fld select,.fld textarea{min-height:40px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);padding:6px 10px;width:100%}
+.fld input[type=text],.fld input[type=password],.fld input[type=number],.fld input[type=date],.fld select,.fld textarea{min-height:40px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);padding:6px 10px;width:100%}
 .fld textarea{min-height:70px;resize:vertical}
 .fld input:disabled,.fld select:disabled,.fld textarea:disabled{opacity:.75;cursor:not-allowed}
 .help{font-size:12px;color:var(--faint)}
@@ -239,6 +239,7 @@ td select{min-height:36px;border:1px solid var(--border);border-radius:8px;backg
   <symbol id="ic-back" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></symbol>
   <symbol id="ic-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
   <symbol id="ic-file" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></symbol>
+  <symbol id="ic-key" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 9.8-9.8M16 7l3 3M19 4l2 2"/></symbol>
   <symbol id="ic-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></symbol>
 </svg>
 
@@ -249,12 +250,10 @@ td select{min-height:36px;border:1px solid var(--border);border-radius:8px;backg
     <p class="sub" id="authSub">سجّل دخولك للمتابعة</p>
     <div id="cfgWarn"></div>
     <div id="authMsg"></div>
-    <div class="fld"><label for="em">الإيميل</label><input type="text" id="em" autocomplete="username"></div>
-    <div class="fld"><label for="pw">كلمة السر</label><input type="password" id="pw" autocomplete="current-password"></div>
-    <div class="fld hidden" id="nameFld"><label for="fn">الاسم الكامل</label><input type="text" id="fn"></div>
+    <div class="fld"><label for="em">اسم المستخدم</label><input type="text" id="em" autocomplete="username" autocapitalize="off" spellcheck="false" dir="ltr"></div>
+    <div class="fld"><label for="pw">الرمز</label><input type="password" id="pw" autocomplete="current-password" dir="ltr"></div>
     <button class="btn primary" id="authBtn">دخول</button>
-    <button class="link-btn" id="authSwap">ما عندك حساب؟ سجّل جديد</button>
-    <button class="link-btn" id="authForgot" style="font-weight:500;color:var(--faint)">نسيت كلمة السر؟</button>
+    <p class="help" style="text-align:center;margin:12px 0 0">ما عندك حساب أو نسيت الرمز؟ راجع الأدمن.</p>
   </div>
 </div>
 
@@ -269,6 +268,7 @@ td select{min-height:36px;border:1px solid var(--border);border-radius:8px;backg
     </nav>
     <div class="spacer"></div>
     <div class="who"><span id="meName" style="font-weight:600"></span><span class="role-pill" id="rolePill"></span></div>
+    <button class="icon-btn" id="pwBtn" aria-label="تغيير رمزي" title="تغيير رمزي"><svg class="i"><use href="#ic-key"/></svg></button>
     <button class="icon-btn" id="themeBtn" aria-label="الوضع الليلي"><svg class="i"><use href="#ic-moon"/></svg></button>
     <button class="icon-btn" id="outBtn" aria-label="خروج" title="خروج"><svg class="i"><use href="#ic-back"/></svg></button>
   </div>
@@ -294,7 +294,10 @@ td select{min-height:36px;border:1px solid var(--border);border-radius:8px;backg
   <div class="page">
     <div class="panel">
       <h3 style="margin-top:0">المستخدمين</h3>
-      <p class="note">الموظف يسجّل حساب بنفسه من صفحة الدخول، ويبقى معطّل لحد ما تفعّله هنا وتحدد دوره.</p>
+      <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:10px">
+        <p class="note" style="margin:0;flex:1;min-width:220px">تسوي الحساب هنا وتنطي الموظف اسم المستخدم والرمز. الموظف يكدر يغير رمزه بعدين من زر المفتاح فوق.</p>
+        <button class="btn primary" id="addUserBtn"><svg class="i"><use href="#ic-plus"/></svg>مستخدم جديد</button>
+      </div>
       <div class="tbl-wrap"><table id="usersTbl"></table></div>
     </div>
     <div class="panel">
@@ -367,56 +370,18 @@ const ldAmount=inv=>inv.ld?num(inv.value)*num(inv.ld_pct)/100:0;
 const hasTerms=inv=>!!(inv.ld||inv.exc||inv.payment==='credit'||inv.payer==='company'||num(inv.unload_amt)>0||inv.from_purch);
 
 /* ---------- تسجيل الدخول ---------- */
-// الأوضاع: login | signup | forgot (طلب رابط) | recover (تعيين كلمة جديدة بعد فتح الرابط)
-let mode='login';
-// لازم نقرأه قبل لا تمسح المكتبة الـ hash من الرابط
-let recovering=/type=recovery/.test(location.hash);
-function setMode(m){mode=m;
-  const T={login:['دخول','سجّل دخولك للمتابعة'],signup:['إنشاء حساب','سجّل حساب، وبعدها الأدمن يفعّله'],
-    forgot:['إرسال رابط','نرسلك رابط على الإيميل تغير بيه كلمة السر'],recover:['حفظ كلمة السر','اكتب كلمة السر الجديدة']}[m];
-  $('#authBtn').textContent=T[0];$('#authSub').textContent=T[1];
-  $('#nameFld').classList.toggle('hidden',m!=='signup');
-  $('#em').closest('.fld').classList.toggle('hidden',m==='recover');
-  $('#pw').closest('.fld').classList.toggle('hidden',m==='forgot');
-  $('label[for="pw"]').textContent=m==='recover'?'كلمة السر الجديدة':'كلمة السر';
-  $('#pw').autocomplete=m==='login'?'current-password':'new-password';
-  $('#authSwap').classList.toggle('hidden',m==='recover');
-  $('#authSwap').textContent=m==='login'?'ما عندك حساب؟ سجّل جديد':'رجوع لتسجيل الدخول';
-  $('#authForgot').classList.toggle('hidden',m!=='login');
-  $('#authMsg').innerHTML='';
-}
-$('#authSwap').onclick=()=>setMode(mode==='login'?'signup':'login');
-$('#authForgot').onclick=()=>setMode('forgot');
+// الحسابات يسويها الأدمن فقط. اسم المستخدم ينحفظ كإيميل داخلي (ahmed → ahmed@invoices.local)
+const LOGIN_DOMAIN='@invoices.local';
+const loginEmail=u=>{u=u.trim().toLowerCase();return u.includes('@')?u:u+LOGIN_DOMAIN};
 function authMsg(t,cls='bad'){$('#authMsg').innerHTML=`<div class="auth-msg ${cls}">${esc(t)}</div>`}
 $('#authBtn').onclick=async()=>{
   if(!sb)return authMsg('ما مضبوطة إعدادات الاتصال');
-  const email=$('#em').value.trim(),password=$('#pw').value;
-  if(mode==='forgot'){
-    if(!email)return authMsg('اكتب الإيميل');
-  }else if(mode==='recover'){
-    if(password.length<8)return authMsg('كلمة السر لازم 8 أحرف على الأقل');
-  }else if(!email||!password)return authMsg('اكتب الإيميل وكلمة السر');
+  const user=$('#em').value.trim(),password=$('#pw').value;
+  if(!user||!password)return authMsg('اكتب اسم المستخدم والرمز');
   $('#authBtn').classList.add('busy');
   try{
-    if(mode==='forgot'){
-      const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
-      if(error)throw error;
-      authMsg('إذا الإيميل مسجل، راح يوصلك رابط لتغيير كلمة السر.','ok');
-    }else if(mode==='recover'){
-      const {error}=await sb.auth.updateUser({password});
-      if(error)throw error;
-      recovering=false;$('#pw').value='';setMode('login');
-      history.replaceState(null,'',location.pathname);
-      boot();
-    }else if(mode==='signup'){
-      if(password.length<8)throw new Error('كلمة السر لازم 8 أحرف على الأقل');
-      const {error}=await sb.auth.signUp({email,password,options:{data:{full_name:$('#fn').value.trim()}}});
-      if(error)throw error;
-      authMsg('انفتح الحساب. راجع الأدمن حتى يفعّله ويحدد دورك.','ok');
-    }else{
-      const {error}=await sb.auth.signInWithPassword({email,password});
-      if(error)throw error;
-    }
+    const {error}=await sb.auth.signInWithPassword({email:loginEmail(user),password});
+    if(error)throw new Error(error.message==='Invalid login credentials'?'اسم المستخدم أو الرمز غلط':error.message);
   }catch(e){authMsg(e.message||'صار خطأ')}
   $('#authBtn').classList.remove('busy');
 };
@@ -427,8 +392,6 @@ if(sb){
   // INITIAL_SESSION يغني عن getSession؛ و TOKEN_REFRESHED ما يحتاج إعادة تحميل
   sb.auth.onAuthStateChange((e,session)=>{
     if(!session){ME=null;if(chan){sb.removeChannel(chan);chan=null}return showAuth()}
-    // جاي من رابط "نسيت كلمة السر": نطلب الكلمة الجديدة قبل لا يدخل
-    if(e==='PASSWORD_RECOVERY'||recovering){recovering=true;setMode('recover');return showAuth()}
     if(e==='INITIAL_SESSION'||(e==='SIGNED_IN'&&!ME))setTimeout(boot,0);
   });
 }
@@ -783,12 +746,18 @@ $('#newBtn').onclick=async()=>{
 };
 
 /* ---------- المستخدمين ---------- */
+let LOGINS={};
+const genPw=()=>{const c='abcdefghjkmnpqrstuvwxyz23456789',a=new Uint32Array(10);crypto.getRandomValues(a);return [...a].map(x=>c[x%c.length]).join('')};
 async function renderUsers(){
+  const {data}=await sb.rpc('admin_list_logins');
+  LOGINS=Object.fromEntries((data||[]).map(r=>[r.id,r.login]));
   const roleOpts=sel=>Object.entries(ROLES).map(([k,v])=>`<option value="${k}" ${sel===k?'selected':''}>${v}</option>`).join('');
-  $('#usersTbl').innerHTML=`<thead><tr><th>الاسم</th><th>الدور</th><th>مفعّل</th></tr></thead><tbody>${PROFILES.map(u=>`<tr>
+  $('#usersTbl').innerHTML=`<thead><tr><th>الاسم</th><th>اسم المستخدم</th><th>الدور</th><th>مفعّل</th><th></th></tr></thead><tbody>${PROFILES.map(u=>`<tr>
     <td>${esc(u.full_name)||'<span class="help">بدون اسم</span>'}</td>
+    <td dir="ltr" style="text-align:end">${esc(LOGINS[u.id]||'—')}</td>
     <td><select data-urole="${u.id}" ${u.id===ME.id?'disabled':''}>${roleOpts(u.role)}</select></td>
-    <td><label class="toggle"><input type="checkbox" data-uact="${u.id}" ${u.active?'checked':''} ${u.id===ME.id?'disabled':''}>${u.active?'فعال':'موقوف'}</label></td></tr>`).join('')}</tbody>`;
+    <td><label class="toggle"><input type="checkbox" data-uact="${u.id}" ${u.active?'checked':''} ${u.id===ME.id?'disabled':''}>${u.active?'فعال':'موقوف'}</label></td>
+    <td><button class="btn sm" data-upw="${u.id}">${ic('key')}تغيير الرمز</button></td></tr>`).join('')}</tbody>`;
   const P=[['إنشاء طلب','✓','—','—','—'],['يشوف الطلبات','طلباته','الكل','الكل','القرار + تمت'],['إضافة النقل والشروط','—','✓','—','—'],['موافقة / إرجاع','—','—','✓','—'],['تأشير رد الزبون','طلباته','—','✓','—'],['رقم المبيعات','—','—','✓','✓'],['تصدير Excel','—','✓','✓','—']];
   $('#permTbl').innerHTML=`<thead><tr><th>الإجراء</th><th>مندوب</th><th>محاسب</th><th>مدير</th><th>مخزن</th></tr></thead><tbody>${P.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody>`;
 }
@@ -798,6 +767,52 @@ $('#usersTbl').addEventListener('change',async e=>{
   const {error}=await sb.from('profiles').update(patch).eq('id',r||a);
   if(error)return toast(error.message);
   await loadAll();renderUsers();toast('تم التحديث');
+});
+// يعرض بيانات الدخول مرة وحدة حتى الأدمن ينطيها للموظف
+function showCreds(title,login,pw){
+  ask(title,[],()=>{});
+  $('#mBody').innerHTML=`<p style="margin:0">انطي هاي البيانات للموظف. الرمز ما يظهر مرة ثانية.</p>
+    <div class="panel" style="margin:0;direction:ltr;text-align:left;font-variant-numeric:tabular-nums">
+      <div>Username: <b>${esc(login)}</b></div><div>Password: <b>${esc(pw)}</b></div></div>
+    <button type="button" class="btn sm" id="copyCreds">نسخ</button>`;
+  $('#copyCreds').onclick=()=>{navigator.clipboard.writeText(`اسم المستخدم: ${login}
+الرمز: ${pw}
+${location.origin+location.pathname}`).then(()=>toast('انّسخت'),()=>toast('ما انّسخت، انسخها يدوي'))};
+}
+$('#addUserBtn').onclick=()=>{
+  const roles=Object.entries(ROLES).map(([k,v])=>`<option value="${k}" ${k==='rep'?'selected':''}>${v}</option>`).join('');
+  ask('مستخدم جديد',[
+    {id:'n',label:'الاسم الكامل',type:'text',req:true},
+    {id:'u',label:'اسم المستخدم (إنجليزي، مثل ali.hassan)',type:'text',req:true},
+    {id:'p',label:'الرمز (8 أحرف أو أكثر)',type:'text',req:true},
+    {id:'r',label:'الدور',type:'select',opts:roles}
+  ],async v=>{
+    const login=v.u.toLowerCase();
+    const {error}=await sb.rpc('admin_create_user',{p_username:login,p_password:v.p,p_full_name:v.n,p_role:v.r});
+    if(error)return toast(error.message);
+    await loadAll();renderUsers();showCreds('انسوى الحساب ✓',login,v.p);
+  });
+  $('#m_u').dir='ltr';$('#m_p').dir='ltr';$('#m_p').value=genPw();
+};
+$('#usersTbl').addEventListener('click',e=>{
+  const b=e.target.closest('[data-upw]');if(!b)return;
+  const id=b.dataset.upw,u=PROFILES.find(p=>p.id===id)||{};
+  ask('تغيير رمز: '+(u.full_name||''),[{id:'p',label:'الرمز الجديد (8 أحرف أو أكثر)',type:'text',req:true}],async v=>{
+    const {error}=await sb.rpc('admin_set_password',{p_user:id,p_password:v.p});
+    if(error)return toast(error.message);
+    if(id===ME.id)return toast('تغير رمزك');
+    showCreds('تغير الرمز ✓',LOGINS[id]||'',v.p);
+  });
+  $('#m_p').dir='ltr';$('#m_p').value=genPw();
+});
+// أي مستخدم يغير رمزه
+$('#pwBtn').onclick=()=>ask('تغيير رمزي',[
+    {id:'p',label:'الرمز الجديد (8 أحرف أو أكثر)',type:'password',req:true},
+    {id:'c',label:'أعد كتابة الرمز',type:'password',req:true}],async v=>{
+  if(v.p.length<8)return toast('الرمز لازم 8 أحرف على الأقل');
+  if(v.p!==v.c)return toast('الرمزين مو متطابقين');
+  const {error}=await sb.auth.updateUser({password:v.p});
+  toast(error?error.message:'تغير رمزك');
 });
 
 /* ---------- التصدير ---------- */
