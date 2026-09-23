@@ -1,5 +1,5 @@
 import { S } from './state.js';
-import { sb, loadCustomers } from './api.js';
+import { sb, loadCustomers, fetchAll } from './api.js';
 import { $, esc, ask, toast } from './util.js';
 
 const key = n => String(n || '').trim().toLowerCase();
@@ -58,8 +58,29 @@ async function importFile(f) {
   await loadCustomers(); renderCustomers(); toast('انضاف ' + add.length + ' زبون');
 }
 
+// مسح كل الزبائن اللي ما عليهم طلبات (المربوطين بطلبات يبقون حتى ما ينقطع الربط)
+async function clearCustomers() {
+  let used;
+  try { used = new Set((await fetchAll(() => sb.from('invoices').select('customer_id').not('customer_id', 'is', null).order('id'))).map(r => r.customer_id)) }
+  catch (e) { return toast(e.message) }
+  const ids = S.CUSTOMERS.filter(c => !used.has(c.id)).map(c => c.id);
+  if (!ids.length) return toast('كل الزبائن عليهم طلبات، ماكو شي ينمسح');
+  ask('مسح الزبائن', [{ id: 'c', label: 'اكتب "مسح" للتأكيد', type: 'text', req: true,
+    help: `راح ينمسح ${ids.length} زبون.` + (used.size ? ` ويبقى ${used.size} لأن عليهم طلبات.` : '') + ' ما يرجعون.' }], async v => {
+    if (v.c.trim() !== 'مسح') return toast('ما تم المسح');
+    let done = 0;
+    for (let i = 0; i < ids.length; i += 200) {
+      const { error } = await sb.from('customers').delete().in('id', ids.slice(i, i + 200));
+      if (error) { toast(error.message); break }
+      done += Math.min(200, ids.length - i);
+    }
+    await loadCustomers(); renderCustomers(); toast(`انمسح ${done} زبون`);
+  }, { okText: 'مسح' });
+}
+
 export function initCustomers() {
   $('#custAdd').onclick = () => editCustomer(null);
+  $('#custClear').onclick = clearCustomers;
   ['#custQ', '#custOff'].forEach(s => $(s).addEventListener('input', renderCustomers));
   $('#custImport').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) importFile(f) });
   $('#custTbl').addEventListener('click', e => {
