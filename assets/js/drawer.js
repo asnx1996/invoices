@@ -1,13 +1,14 @@
 import { S, COLS, SUB, PAY, PAY_LEGACY, PAYER, PAYER_LEGACY, MONTHS, POINT_RATE, hasRole, getInv, userName, reps, isActive,
   ldAmount, transportAdded, totalAfterTransport, pointsPct, onChange } from './state.js';
 import { renderBoard } from './board.js';
-import { $, esc, num, fmt, money, pct, dt, dOnly, ic, toast } from './util.js';
+import { $, esc, num, fmt, money, pct, dt, dOnly, ic, toast, ask, cur, numAttrs, numVal } from './util.js';
 import { sb, rpc, refreshInvoice } from './api.js';
 import { can } from './can.js';
 import { run, waitingOn, missingBasic, missingTerms } from './actions.js';
 
 let extra = { comments: [], log: [], pdfUrl: null, costEdit: false };
 let returnFocus = null;
+const shown = { steps: false, log: false }; // الأقسام المطوية تبقى مثل ما تركها المستخدم
 
 export async function openDrawer(id, push = true) {
   const wasOpen = !!S.drawerId;
@@ -25,6 +26,7 @@ export async function openDrawer(id, push = true) {
     d.classList.add('open'); $('#scrim').classList.add('open'); d.inert = false; $('#appView').inert = true;
     d.querySelector('.close').focus({ preventScroll: true });
   }
+  if (id === 'draft') return;
   const [c, l] = await Promise.all([
     sb.from('invoice_comments').select('*').eq('invoice_id', id).order('at'),
     sb.from('invoice_log').select('*').eq('invoice_id', id).order('at'),
@@ -36,14 +38,40 @@ export async function openDrawer(id, push = true) {
 }
 
 // الإغلاق يمر من التاريخ (history) حتى يبقى متطابق مع زر الرجوع؛ popstate يستدعي hideDrawer
-export function closeDrawer() {
+export function closeDrawer(force) {
+  const dr = S.drawerId === 'draft' && S.draft;
+  if (force !== true && dr && (dr.customer_id || dr.value || dr.quote_no || dr.res_no || S.draftFile))
+    return ask('تجاهل الطلب الجديد؟', [], () => closeDrawer(true), { okText: 'تجاهل', danger: true, msg: 'الطلب ما انحفظ، وإذا طلعت تروح البيانات اللي كتبتها.' });
   if (S.drawerId && history.state && history.state.drawer) { history.back(); return }
   hideDrawer();
 }
 
+// طلب جديد: يتعبى بالدرج محلياً، وبس من يضغط "حفظ الطلب" ينضاف للقاعدة ويطلع كبطاقة
+export function openDraft(rep_id) {
+  S.draft = { id: 'draft', stage: 'new', rep_id, customer: '', customer_id: null, quote_no: null, res_no: null, value: null, created_at: new Date().toISOString() };
+  S.draftFile = null;
+  openDrawer('draft');
+}
+
+async function saveDraft() {
+  const dr = S.draft; if (!dr) return;
+  if (!dr.customer_id) { toast('اختار الزبون من القائمة أول'); const f = $('#f_customer_pick'); f && f.focus(); return }
+  const btn = $('#saveDraft'); btn.classList.add('busy'); btn.setAttribute('aria-busy', 'true');
+  const { data, error } = await sb.from('invoices').insert({
+    rep_id: dr.rep_id, customer_id: dr.customer_id, customer: dr.customer, quote_no: dr.quote_no, res_no: dr.res_no, value: dr.value,
+  }).select().single();
+  if (error) { btn.classList.remove('busy'); btn.removeAttribute('aria-busy'); return toast(error.message) }
+  const file = S.draftFile;
+  await refreshInvoice(data.id);          // المسودة تبقى معروضة لحد ما يوصل الطلب الحقيقي
+  S.draft = null; S.draftFile = null;
+  await openDrawer(data.id);
+  toast('انحفظ الطلب #' + data.id);
+  if (file) uploadPdf(getInv(data.id), file);
+}
+
 export function hideDrawer() {
   const id = S.drawerId;
-  S.drawerId = null; S.lastMissing = null;
+  S.drawerId = null; S.lastMissing = null; S.draft = null; S.draftFile = null;
   const d = $('#drawer');
   if (!d.classList.contains('open')) return;
   d.classList.remove('open'); $('#scrim').classList.remove('open'); d.inert = true; $('#appView').inert = false;
@@ -63,7 +91,7 @@ function fld(label, col, val, { type = 'text', req = false, dis = false, full = 
   const id = 'f_' + col; let input;
   if (opts) input = `<select id="${id}" data-f="${col}" ${rer ? 'data-rer="1"' : ''} ${dis ? 'disabled' : ''}><option value="">— اختر —</option>${Object.entries(opts).map(([k, v]) => `<option value="${esc(k)}" ${String(val) === String(k) ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select>`;
   else if (type === 'textarea') input = `<textarea id="${id}" data-f="${col}" ${dis ? 'disabled' : ''}>${esc(val)}</textarea>`;
-  else input = `<input type="${type}" id="${id}" data-f="${col}" value="${esc(val ?? '')}" ${dis ? 'disabled' : ''} ${type === 'number' ? 'min="0" step="any" inputmode="decimal"' : ''} ${rer ? 'data-rer="1"' : ''} ${list ? `list="${list}"` : ''}>`;
+  else input = `<input ${type === 'number' ? numAttrs : `type="${type}"`} id="${id}" data-f="${col}" value="${esc(type === 'number' ? numVal(val) : val ?? '')}" ${dis ? 'disabled' : ''} ${rer ? 'data-rer="1"' : ''} ${list ? `list="${list}"` : ''}>`;
   return `<div class="fld ${full ? 'full' : ''}"><label for="${id}">${label}${req ? ' <span class="req">*</span>' : ''}</label>${input}${help ? `<div class="help">${help}</div>` : ''}</div>`;
 }
 const tog = (label, col, val, dis) => `<label class="toggle" for="f_${col}"><input type="checkbox" id="f_${col}" data-f="${col}" data-rer="1" ${val ? 'checked' : ''} ${dis ? 'disabled' : ''}>${label}</label>`;
@@ -85,6 +113,8 @@ function deleteReqHTML(inv) {
 }
 
 function actionsHTML(inv) {
+  if (inv.id === 'draft') return `<div class="actions"><div class="wait">${ic('file')}<span>طلب جديد — ما يطلع باللوحة لحد ما تحفظه</span></div>
+    <div class="row"><button class="btn primary" id="saveDraft">${ic('check')}حفظ الطلب</button></div></div>`;
   const btn = (a, label, cls = '', icn = '') => can(a, inv) ? `<button class="btn ${cls}" data-act="${a}">${icn ? ic(icn) : ''}${label}</button>` : '';
   const btns = [btn('sendToAcc', 'إرسال للحسابات', 'primary', 'check'), btn('sendToDecision', 'إرسال للقرار', 'primary', 'check'),
     btn('approve', 'موافقة على الشروط', 'ok', 'check'), btn('returnToAcc', 'إرجاع للحسابات', 'bad', 'back'),
@@ -111,10 +141,10 @@ function customerFld(inv, dis) {
 
 function costFld(inv) {
   if (!can('setCost', inv)) return '';
-  if (hasRole('admin')) return fld('سعر الكلفة (د.ع) — للأدمن فقط', 'cost', S.COSTS[inv.id] ?? '', { type: 'number', req: true, help: 'ما يظهر لأي أحد غيرك' }).replace('data-f="cost"', 'data-cost="1"');
+  if (hasRole('admin')) return fld(`سعر الكلفة (${cur()}) — للأدمن فقط`, 'cost', S.COSTS[inv.id] ?? '', { type: 'number', req: true, help: 'ما يظهر لأي أحد غيرك' }).replace('data-f="cost"', 'data-cost="1"');
   if (inv.cost_set && !extra.costEdit)
     return `<div class="fld"><label>سعر الكلفة</label><div class="cost-set">${ic('check')}مسجّل (مخفي) <button class="btn sm" data-costedit="1">تغيير</button></div></div>`;
-  return fld('سعر الكلفة (د.ع)', 'cost', '', { type: 'number', req: true, help: 'بعد الحفظ يختفي ومحد يشوفه غير الأدمن' }).replace('data-f="cost"', 'data-cost="1"');
+  return fld(`سعر الكلفة (${cur()})`, 'cost', '', { type: 'number', req: true, help: 'بعد الحفظ يختفي ومحد يشوفه غير الأدمن' }).replace('data-f="cost"', 'data-cost="1"');
 }
 
 function termsHTML(inv) {
@@ -122,14 +152,13 @@ function termsHTML(inv) {
   const payOpts = { ...PAY, ...(PAY_LEGACY[inv.payment] ? { [inv.payment]: PAY_LEGACY[inv.payment] } : {}) };
   const payerOpts = { ...PAYER, ...(PAYER_LEGACY[inv.payer] ? { [inv.payer]: PAYER_LEGACY[inv.payer] } : {}) };
   const tr = transportAdded(inv);
-  return `<section class="blk"><h4>السداد والتوصيل ${et ? `<span class="lock">${ic('lock')}يعدلها المحاسب</span>` : ''}</h4>
+  return `<section class="blk"><h4>السداد والنقل ${et ? `<span class="lock">${ic('lock')}يعدلها المحاسب</span>` : ''}</h4>
     <div class="grid">
       ${fld('طريقة السداد', 'payment', inv.payment, { opts: payOpts, req: true, dis: et, rer: true })}
       ${inv.payment === 'credit' ? fld('مدة الآجل', 'credit_months', inv.credit_months, { opts: MONTHS, req: true, dis: et, rer: true }) : '<div></div>'}
-      ${fld('التوصيل', 'payer', inv.payer, { opts: payerOpts, req: true, dis: et, rer: true })}
-      ${inv.payer === 'customer' ? fld('أجور النقل (د.ع)', 'transport_amt', inv.transport_amt, { type: 'number', req: true, dis: et, rer: true, help: 'تنضاف على قيمة الفاتورة' }) : '<div></div>'}
+      ${fld('النقل', 'payer', inv.payer, { opts: payerOpts, req: true, dis: et, rer: true })}
+      ${inv.payer === 'customer' ? fld(`أجور النقل (${cur()})`, 'transport_amt', inv.transport_amt, { type: 'number', req: true, dis: et, rer: true, help: 'تنضاف على قيمة الفاتورة' }) : '<div></div>'}
       <div class="fld full"><div class="help">الإجمالي بعد النقل: <b>${money(totalAfterTransport(inv))}</b>${tr ? ` (${money(inv.value)} + ${money(tr)})` : ''}</div></div>
-      ${fld('أجور التفريغ/التحميل (د.ع)', 'unload_amt', inv.unload_amt, { type: 'number', dis: et })}
       ${fld('عدد النقاط', 'points', inv.points, { type: 'number', dis: et, rer: true, help: `نسبة النقاط: ${fmt(pointsPct(inv))}% (النقطة = ${POINT_RATE}%)` })}
       ${costFld(inv)}
       <div class="term-box">${tog('خصم لاحق', 'ld', inv.ld, et)}
@@ -157,7 +186,7 @@ function profitHTML(inv) {
 
 export function renderDrawer() {
   const inv = getInv(S.drawerId); if (!inv) return closeDrawer();
-  const eb = !can('editBasic', inv);
+  const eb = !can('editBasic', inv), draft = inv.id === 'draft';
   const col = COLS.find(c => c.k === inv.stage);
   // نحافظ على مكان التمرير والحقل المحدد بعد إعادة الرسم
   const body = $('#drawer .d-body'), scroll = body ? body.scrollTop : 0;
@@ -167,34 +196,35 @@ export function renderDrawer() {
   $('#drawer').innerHTML = `
   <div class="d-head">
     <div style="flex:1;min-width:0">
-      <div class="sub">#${inv.id} · ${esc(userName(inv.rep_id))} · ${dOnly(inv.created_at)}</div>
+      <div class="sub">${draft ? 'غير محفوظ' : '#' + inv.id} · ${esc(userName(inv.rep_id))} · ${dOnly(inv.created_at)}</div>
       <h3>${esc(inv.customer) || 'طلب جديد'}</h3>
       <span class="badge" style="background:var(--surface-2);color:${col.c};border:1px solid var(--border)">${col.t}${inv.stage === 'decision' ? ' · ' + SUB[inv.sub] : ''}</span>
     </div>
     <button class="icon-btn close" aria-label="إغلاق">${ic('x')}</button>
   </div>
   <div class="d-body">
-    ${stepsHTML(inv)}${actionsHTML(inv)}
-    ${profitHTML(inv)}
+    ${actionsHTML(inv)}
+    ${draft ? '' : `<details class="more" data-more="steps" ${shown.steps ? 'open' : ''}><summary>مراحل الطلب</summary>${stepsHTML(inv)}</details>`}
+    ${draft ? '' : profitHTML(inv)}
     <section class="blk"><h4>بيانات الطلب ${eb ? `<span class="lock">${ic('lock')}للعرض فقط</span>` : ''}</h4>
       <div class="grid">
         ${customerFld(inv, eb)}
         ${fld('رقم عرض السعر', 'quote_no', inv.quote_no, { dis: qDis })}
         ${fld('رقم الحجز', 'res_no', inv.res_no, { dis: rDis, help: 'واحد منهم فقط' })}
-        ${fld('قيمة الفاتورة (د.ع)', 'value', inv.value, { type: 'number', req: true, dis: eb, rer: true })}
+        ${fld(`قيمة الفاتورة (${cur()})`, 'value', inv.value, { type: 'number', req: true, dis: eb, rer: true })}
         ${hasRole('admin') && inv.stage === 'new' ? fld('المندوب', 'rep_id', inv.rep_id, { opts: Object.fromEntries(reps().map(r => [r.id, r.full_name])), rer: true }) : `<div class="fld"><label>المندوب</label><input type="text" value="${esc(userName(inv.rep_id))}" disabled></div>`}
         <div class="fld full"><label>ملف الفاتورة PDF <span class="req">*</span></label>
-          <div class="pdf">${ic('file')}<span class="name">${inv.pdf_path ? esc(inv.pdf_name || 'ملف') + ' · ' + Math.round((inv.pdf_size || 0) / 1024) + ' KB' : '<span style="color:var(--faint)">ما مرفوع ملف</span>'}</span>
+          <div class="pdf">${ic('file')}<span class="name" title="${esc(inv.pdf_name || '')}">${inv.pdf_path || inv.pdf_name ? esc(inv.pdf_name || 'ملف') + ' · ' + Math.round((inv.pdf_size || 0) / 1024) + ' KB' : '<span style="color:var(--faint)">ما مرفوع ملف</span>'}</span>
           ${extra.pdfUrl ? `<a class="btn sm" href="${esc(extra.pdfUrl)}" target="_blank" rel="noopener noreferrer">فتح</a>` : ''}
-          ${!eb ? `<label class="btn sm" for="pdfIn">${inv.pdf_path ? 'تغيير' : 'رفع'}</label><input type="file" id="pdfIn" accept="application/pdf" class="hidden">` : ''}</div>
-          <div class="help">الحد الأقصى 2 MB</div></div>
+          ${!eb ? `<label class="btn sm" for="pdfIn">${inv.pdf_path || inv.pdf_name ? 'تغيير' : 'رفع'}</label><input type="file" id="pdfIn" accept="application/pdf" class="hidden">` : ''}</div>
+          <div class="help">الحد الأقصى 2 MB${draft && inv.pdf_name ? ' · ينرفع وياه من تحفظ الطلب' : ''}</div></div>
       </div></section>
-    ${can('seeTerms', inv) ? termsHTML(inv) : ''}
-    <section class="blk"><h4>التعليقات</h4>
+    ${!draft && can('seeTerms', inv) ? termsHTML(inv) : ''}
+    ${draft ? '' : `<section class="blk"><h4>التعليقات</h4>
       ${extra.comments.map(c => `<div class="comment ${c.is_system ? 'sys' : ''}"><div class="by">${esc(userName(c.author))} · ${dt(c.at)}</div>${esc(c.body)}</div>`).join('') || '<div class="help" style="margin-bottom:8px">لا توجد تعليقات</div>'}
       <div class="add-c"><input type="text" id="cIn" placeholder="اكتب تعليق..." aria-label="تعليق"><button class="btn primary" id="cBtn">إرسال</button></div></section>
-    <section class="blk"><h4>سجل الحركة</h4>
-      <ul class="timeline">${extra.log.slice().reverse().map(l => `<li><div>${esc(userName(l.actor))}: ${esc(l.body)}</div><div class="t">${dt(l.at)}</div></li>`).join('') || '<li class="help">—</li>'}</ul></section>
+    <details class="more blk" data-more="log" ${shown.log ? 'open' : ''}><summary>سجل الحركة${extra.log.length ? ` (${extra.log.length})` : ''}</summary>
+      <ul class="timeline">${extra.log.slice().reverse().map(l => `<li><div>${esc(userName(l.actor))}: ${esc(l.body)}</div><div class="t">${dt(l.at)}</div></li>`).join('') || '<li class="help">—</li>'}</ul></details>`}
   </div>`;
   $('#drawer .d-body').scrollTop = scroll;
   if (focusId) { const f = document.getElementById(focusId); if (f && !f.disabled) f.focus({ preventScroll: true }) }
@@ -209,6 +239,7 @@ async function addComment() {
 }
 
 async function save(inv, patch, rerender) {
+  if (inv.id === 'draft') { Object.assign(inv, patch); if (rerender) renderDrawer(); return true }
   const { error } = await sb.from('invoices').update(patch).eq('id', inv.id);
   if (error) { toast(error.message); renderDrawer(); return false }
   Object.assign(inv, patch);
@@ -226,6 +257,7 @@ async function save(inv, patch, rerender) {
 async function uploadPdf(inv, f) {
   if (f.type !== 'application/pdf') return toast('الملف لازم PDF');
   if (f.size > 2 * 1024 * 1024) return toast('الحجم أكثر من 2 MB');
+  if (inv.id === 'draft') { S.draftFile = f; Object.assign(inv, { pdf_name: f.name, pdf_size: f.size }); return renderDrawer() }
   const path = `${inv.id}/${Date.now()}-${f.name.replace(/[^\w.\-]/g, '_')}`;
   toast('جاري الرفع...');
   const up = await sb.storage.from('invoices').upload(path, f, { contentType: 'application/pdf' });
@@ -296,7 +328,10 @@ export function initDrawer() {
     const a = e.target.closest('[data-act]'); if (a) return run(a.dataset.act, S.drawerId);
     if (e.target.closest('[data-costedit]')) { extra.costEdit = true; renderDrawer(); setTimeout(() => { const c = $('#f_cost'); c && c.focus() }, 30); return }
     if (e.target.closest('#cBtn')) addComment();
+    if (e.target.closest('#saveDraft')) saveDraft();
   });
+  // نتذكر إذا المستخدم فتح "مراحل الطلب" أو "سجل الحركة"
+  d.addEventListener('toggle', e => { const k = e.target.dataset && e.target.dataset.more; if (k) shown[k] = e.target.open }, true);
   initSwipe(d);
   d.addEventListener('keydown', e => { if (e.target.id === 'cIn' && e.key === 'Enter') { e.preventDefault(); addComment() } });
 
@@ -331,7 +366,7 @@ export function initDrawer() {
     const col = el.dataset.f; if (!col) return;
     let val = el.type === 'checkbox' ? el.checked : el.value;
     if (val === '') val = null;
-    if (['value', 'transport_amt', 'unload_amt', 'ld_pct', 'points', 'credit_months'].includes(col)) val = val === null ? null : num(val);
+    if (['value', 'transport_amt', 'ld_pct', 'points', 'credit_months'].includes(col)) val = val === null ? null : num(val);
     if (col === 'points' && val === null) val = 0;
     const patch = { [col]: val };
     // تنظيف الحقول التابعة

@@ -26,7 +26,7 @@ export function missingTerms(inv) {
   const m = [];
   if (!['cash', 'credit'].includes(inv.payment)) m.push('طريقة السداد (نقدي أو آجل)');
   if (inv.payment === 'credit' && !inv.credit_months) m.push('عدد أشهر الآجل');
-  if (!['customer', 'company'].includes(inv.payer)) m.push('التوصيل: على الزبون أو على الشركة');
+  if (!['customer', 'none', 'company'].includes(inv.payer)) m.push('النقل: على الزبون أو بدون');
   if (inv.payer === 'customer' && num(inv.transport_amt) <= 0) m.push('مبلغ أجور النقل');
   if (inv.ld && (num(inv.ld_pct) <= 0 || num(inv.ld_pct) > 100)) m.push('نسبة الخصم اللاحق');
   if (!inv.cost_set) m.push('سعر الكلفة');
@@ -80,8 +80,8 @@ export const ACTIONS = {
     v => step('inv_request_delete', { p_id: inv.id, p_reason: v.r }, 'انرسل طلب الحذف للأدمن', inv.id)),
   cancelDeleteReq: inv => step('inv_cancel_delete_request', { p_id: inv.id },
     inv.delete_req_by === S.ME.id ? 'انلغى طلب الحذف' : 'انرفض طلب الحذف', inv.id),
-  delete: inv => ask('حذف الطلب #' + inv.id + ' نهائياً', [{ id: 'c', label: 'اكتب "حذف" للتأكيد', type: 'text', req: true, help: 'ينحذف الطلب وملفه وتعليقاته وسجله. ما يرجع.' }],
-    v => v.c.trim() === 'حذف' ? deleteInvoice(inv) : toast('ما تم الحذف'), { okText: 'حذف نهائي' }),
+  delete: inv => ask('حذف الطلب #' + inv.id, [], () => deleteInvoice(inv),
+    { okText: 'حذف نهائي', danger: true, msg: 'ينحذف الطلب وملفه وتعليقاته وسجله نهائياً، وما يرجع.' }),
 };
 
 export function run(a, id) {

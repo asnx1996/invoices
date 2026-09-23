@@ -1,11 +1,12 @@
-import { S, ROLES, rolesText } from './state.js';
-import { sb, rpc, loadProfiles } from './api.js';
-import { $, esc, ic, ask, toast, genPw } from './util.js';
+import { S, ROLES, rolesText, changed } from './state.js';
+import { sb, rpc, loadProfiles, saveSetting } from './api.js';
+import { $, esc, ic, ask, toast, genPw, cur, setCurrency } from './util.js';
 import { backupNow } from './backup.js';
 
 let LOGINS = {};
 
 export async function renderUsers() {
+  $('#setCur').value = cur();
   const { data } = await sb.rpc('admin_list_logins');
   LOGINS = Object.fromEntries((data || []).map(r => [r.id, r.login]));
   $('#usersTbl').innerHTML = `<thead><tr><th>الاسم</th><th>اسم المستخدم</th><th>الأدوار</th><th>مفعّل</th><th></th></tr></thead><tbody>${S.PROFILES.map(u => {
@@ -40,6 +41,12 @@ function showCreds(title, login, pw) {
 async function refresh() { await loadProfiles(); renderUsers() }
 
 export function initUsers() {
+  $('#setCurBtn').onclick = async () => {
+    const v = $('#setCur').value.trim();
+    if (!v) return toast('اكتب العملة');
+    if (!await saveSetting('currency', v)) return;
+    setCurrency(v); changed(); toast('صارت العملة: ' + v);
+  };
   $('#addUserBtn').onclick = () => ask('مستخدم جديد', [
     { id: 'n', label: 'الاسم الكامل', type: 'text', req: true },
     { id: 'u', label: 'اسم المستخدم (إنجليزي، مثل ali.hassan)', type: 'text', req: true },

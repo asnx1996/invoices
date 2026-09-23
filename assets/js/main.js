@@ -4,7 +4,7 @@ import { can } from './can.js';
 import { $, $$, toast } from './util.js';
 import { initAuth } from './auth.js';
 import { initBoard, renderBoard, fillFilters } from './board.js';
-import { initDrawer, openDrawer, hideDrawer } from './drawer.js';
+import { initDrawer, openDrawer, hideDrawer, openDraft } from './drawer.js';
 import { initUsers, renderUsers } from './users.js';
 import { initCustomers, renderCustomers } from './customers.js';
 import { initReports, renderReports } from './reports.js';
@@ -67,12 +67,10 @@ onChange(() => {
 $$('.tab').forEach(t => t.onclick = () => show(t.dataset.view));
 $('#fRange').addEventListener('change', e => setRange(+e.target.value));
 
-$('#newBtn').onclick = async () => {
+$('#newBtn').onclick = () => {
   const rep_id = hasRole('rep') ? S.ME.id : (reps()[0] || {}).id;
   if (!rep_id) return toast('ماكو مندوبين مفعّلين');
-  const { data, error } = await sb.from('invoices').insert({ rep_id }).select().single();
-  if (error) return toast(error.message);
-  await refreshInvoice(data.id); openDrawer(data.id);
+  openDraft(rep_id); // ما ينضاف للقاعدة لحد ما يضغط "حفظ الطلب"
   setTimeout(() => { const f = $('#f_customer_pick'); f && f.focus() }, 150);
 };
 

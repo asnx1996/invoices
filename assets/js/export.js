@@ -49,7 +49,7 @@ async function exportXlsx(v) {
       'رقم الطلب': i.id, 'رقم عرض السعر': i.quote_no, 'رقم الحجز': i.res_no, 'الزبون': i.customer, 'المندوب': userName(i.rep_id),
       'قيمة الفاتورة': num(i.value), 'طريقة السداد': PAY[i.payment] || PAY_LEGACY[i.payment] || '', 'مدة الآجل': MONTHS[i.credit_months] || '',
       'التوصيل': PAYER[i.payer] || PAYER_LEGACY[i.payer] || '', 'أجور النقل': num(i.transport_amt) || '', 'الإجمالي بعد النقل': totalAfterTransport(i),
-      'أجور التفريغ': num(i.unload_amt) || '', 'النقاط': num(i.points) || '', 'نسبة النقاط %': num(i.points) ? pointsPct(i) : '',
+'النقاط': num(i.points) || '', 'نسبة النقاط %': num(i.points) ? pointsPct(i) : '',
       'خصم لاحق %': i.ld ? num(i.ld_pct) : '', 'مبلغ الخصم اللاحق': i.ld ? ldAmount(i) : '',
     };
     if (admin) row['سعر الكلفة'] = costs[i.id] != null ? num(costs[i.id]) : '';

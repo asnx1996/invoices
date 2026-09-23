@@ -3,7 +3,7 @@
   --text:#0F172A; --muted:#475569; --faint:#5B6B81; --border:#DCE2EA;
   --primary:#1D4ED8; --primary-fg:#FFFFFF; --primary-soft:#DBEAFE;
   --ok:#15803D; --ok-soft:#DCFCE7; --ok-fg:#FFFFFF; --warn:#B45309; --warn-soft:#FEF3C7;
-  --bad:#B91C1C; --bad-soft:#FEE2E2; --vio:#6D28D9; --vio-soft:#EDE9FE;
+  --bad:#B91C1C; --bad-soft:#FEE2E2; --bad-fg:#FFFFFF; --vio:#6D28D9; --vio-soft:#EDE9FE;
   --shadow:0 1px 2px rgba(15,23,42,.06),0 1px 3px rgba(15,23,42,.08);
   --shadow-lg:0 10px 30px rgba(15,23,42,.18);
   /* ظل بطبقات بدل الحدود: يعطي عمق بدون خط صلب */
@@ -19,7 +19,7 @@
     --text:#E2E8F0; --muted:#A5B4C8; --faint:#8A9AB0; --border:#26334A;
     --primary:#60A5FA; --primary-fg:#0B1120; --primary-soft:#1E3A5F;
     --ok:#4ADE80; --ok-soft:#14352A; --ok-fg:#0B1120; --warn:#FBBF24; --warn-soft:#3A2E12;
-    --bad:#F87171; --bad-soft:#3B1A1D; --vio:#A78BFA; --vio-soft:#2A2250;
+    --bad:#F87171; --bad-soft:#3B1A1D; --bad-fg:#0B1120; --vio:#A78BFA; --vio-soft:#2A2250;
     --shadow:0 1px 2px rgba(0,0,0,.4); --shadow-lg:0 10px 30px rgba(0,0,0,.5);
   --shadow-card:0 0 0 1px rgba(255,255,255,.07),0 1px 2px rgba(0,0,0,.4);
     color-scheme:dark;
@@ -30,7 +30,7 @@
   --text:#E2E8F0; --muted:#A5B4C8; --faint:#8A9AB0; --border:#26334A;
   --primary:#60A5FA; --primary-fg:#0B1120; --primary-soft:#1E3A5F;
   --ok:#4ADE80; --ok-soft:#14352A; --ok-fg:#0B1120; --warn:#FBBF24; --warn-soft:#3A2E12;
-  --bad:#F87171; --bad-soft:#3B1A1D; --vio:#A78BFA; --vio-soft:#2A2250;
+  --bad:#F87171; --bad-soft:#3B1A1D; --bad-fg:#0B1120; --vio:#A78BFA; --vio-soft:#2A2250;
   --shadow:0 1px 2px rgba(0,0,0,.4); --shadow-lg:0 10px 30px rgba(0,0,0,.5);
   --shadow-card:0 0 0 1px rgba(255,255,255,.07),0 1px 2px rgba(0,0,0,.4);
   color-scheme:dark;
@@ -50,6 +50,7 @@ svg.i{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-widt
 @media (hover:hover){.btn.primary:hover{filter:brightness(1.08)}}
 .btn.ok{background:var(--ok);color:var(--ok-fg);border-color:var(--ok)}
 .btn.bad{color:var(--bad);border-color:var(--bad)}
+.btn.danger{background:var(--bad);color:var(--bad-fg);border-color:var(--bad)}
 .btn.sm{min-height:34px;padding:0 10px;font-size:14px}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .icon-btn{width:40px;height:40px;display:inline-grid;place-items:center;border-radius:8px;border:1px solid var(--border);background:var(--surface);cursor:pointer;transition:background .15s,transform .25s var(--ease-out)}
@@ -193,6 +194,19 @@ dialog[open]::backdrop{background:rgba(15,23,42,.5)}
 .m-body{padding:16px 18px;display:flex;flex-direction:column;gap:12px}
 .m-foot{padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-start}
 .err{color:var(--bad);font-size:13px;min-height:18px}
+.m-msg{margin:0;font-size:14px;line-height:1.6}
+.m-msg.bad{background:var(--bad-soft);color:var(--bad);border-radius:8px;padding:10px 12px}
+.m-body:has(.m-msg):not(:has(.fld)) .err{display:none}
+/* أقسام الدرج المطوية (مراحل الطلب، سجل الحركة): تنفتح بس إذا احتاجها المستخدم */
+details.more{margin-top:14px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface-2)}
+details.more>summary{list-style:none;cursor:pointer;min-height:44px;display:flex;align-items:center;gap:8px;padding:0 12px;font-size:14px;font-weight:600;color:var(--muted);border-radius:var(--r);-webkit-tap-highlight-color:transparent}
+details.more>summary::-webkit-details-marker{display:none}
+details.more>summary::after{content:"";margin-inline-start:auto;width:8px;height:8px;border:solid currentColor;border-width:0 2px 2px 0;transform:rotate(45deg);transition:transform .2s var(--ease)}
+details.more[open]>summary::after{transform:rotate(-135deg)}
+@media (hover:hover){details.more>summary:hover{color:var(--text)}}
+details.more>:not(summary){margin-inline:12px}
+details.more .steps{margin-block:4px 14px}
+details.more .timeline{padding-block:4px 6px}
 
 /* Users */
 .page{padding:18px;max-width:900px}

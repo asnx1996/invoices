@@ -283,6 +283,15 @@ begin
   perform pg_temp.as_owner();
   perform pg_temp.t_eq('الدور الأساسي يتحدث وحده', format('select role::text from public.profiles where id = %L', new_user), 'wh');
 
+  -- ---------------- الإعدادات (العملة) ----------------
+  perform pg_temp.as_user(u_wh);
+  perform pg_temp.t_eq('الكل يقرأ العملة', $q$select value from public.app_settings where key = 'currency'$q$, 'د.ع');
+  perform pg_temp.t_denied('مخزن: ما يغير العملة', $q$update public.app_settings set value = '$' where key = 'currency'$q$);
+  perform pg_temp.as_user(u_mgr);
+  perform pg_temp.t_denied('مدير: ما يغير العملة', $q$update public.app_settings set value = '$' where key = 'currency'$q$);
+  perform pg_temp.as_user(u_admin);
+  perform pg_temp.t_ok('أدمن: يغير العملة', $q$update public.app_settings set value = '$' where key = 'currency'$q$, 1);
+
   -- ---------------- النتيجة ----------------
   perform pg_temp.as_owner();
   msg := current_setting('tst.fail', true);

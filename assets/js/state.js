@@ -10,6 +10,8 @@ export const S = {
   COSTS: {},          // للأدمن فقط: invoice_id → cost
   drawerId: null,
   loaded: false,      // أول تحميل للطلبات خلص؟
+  draft: null,        // الطلب الجديد قبل الحفظ
+  draftFile: null,    // ملف الـ PDF ينتظر الحفظ
   lastMissing: null,
 };
 
@@ -28,8 +30,8 @@ export const COLS = [
 export const SUB = { mgr: 'بانتظار موافقة المدير', cust: 'بانتظار رد الزبون', wh: 'بانتظار تحويل المخزن' };
 export const PAY = { cash: 'نقدي', credit: 'آجل' };
 export const PAY_LEGACY = { cheque: 'صك', transfer: 'تحويل مصرفي' };
-export const PAYER = { customer: 'على الزبون', company: 'على الشركة' };
-export const PAYER_LEGACY = { none: 'بدون نقل' };
+export const PAYER = { customer: 'على الزبون', none: 'بدون نقل' };
+export const PAYER_LEGACY = { company: 'على الشركة' };
 export const MONTHS = { 1: 'شهر', 2: 'شهرين', 3: '3 أشهر' };
 export const POINT_RATE = 1.5;   // كل نقطة = 1.5%
 
@@ -37,7 +39,8 @@ export const hasRole = r => !!S.ME && S.ME.roles.includes(r);
 export const rolesText = roles => (roles || []).map(r => ROLES[r] || r).join(' + ');
 export const userName = id => (S.PROFILES.find(p => p.id === id) || {}).full_name || '—';
 export const reps = () => S.PROFILES.filter(p => p.active && (p.roles || []).includes('rep'));
-export const getInv = id => S.INVOICES.find(i => i.id === +id);
+// 'draft' = طلب جديد لسه ما انحفظ بالقاعدة (ما يطلع باللوحة لحد الحفظ)
+export const getInv = id => id === 'draft' ? S.draft : S.INVOICES.find(i => i.id === +id);
 export const daysIn = inv => (Date.now() - new Date(inv.stage_at).getTime()) / DAY;
 export const isActive = inv => ['new', 'acc', 'decision'].includes(inv.stage);
 export const ageLevel = inv => { if (!isActive(inv)) return 0; const d = daysIn(inv); return d >= 3 ? 2 : d >= 2 ? 1 : 0 };

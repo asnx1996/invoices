@@ -139,6 +139,16 @@
       <div class="tbl-wrap"><table id="usersTbl"></table></div>
     </div>
     <div class="panel">
+      <h3 style="margin-top:0">إعدادات الموقع</h3>
+      <div class="page-head">
+        <label for="setCur">العملة</label>
+        <input type="text" id="setCur" list="curList" maxlength="10" autocomplete="off" style="width:10em">
+        <datalist id="curList"><option value="د.ع"><option value="$"><option value="IQD"><option value="USD"><option value="€"></datalist>
+        <button class="btn primary" id="setCurBtn">حفظ</button>
+      </div>
+      <p class="help" style="margin:0">تطلع جنب كل المبالغ بالموقع لكل المستخدمين.</p>
+    </div>
+    <div class="panel">
       <h3 style="margin-top:0">مصفوفة الصلاحيات</h3>
       <div class="tbl-wrap"><table class="perm" id="permTbl"></table></div>
     </div>

@@ -1,6 +1,6 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 import { S, changed, hasRole } from './state.js';
-import { toast, DAY } from './util.js';
+import { toast, DAY, setCurrency } from './util.js';
 
 export const configured = /^https:\/\/.+\.supabase\.co$/.test(SUPABASE_URL) && SUPABASE_ANON_KEY.length > 40;
 export const sb = configured ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
@@ -59,8 +59,21 @@ export async function loadCustomers() {
   catch (e) { toast(e.message) }
 }
 
+export async function loadSettings() {
+  const { data, error } = await sb.from('app_settings').select('key,value');
+  if (error) return; // قبل ما تتشغل 005 نبقى على الافتراضي
+  const m = Object.fromEntries((data || []).map(r => [r.key, r.value]));
+  setCurrency(m.currency);
+}
+
+export async function saveSetting(key, value) {
+  const { error } = await sb.from('app_settings').upsert({ key, value, updated_at: new Date().toISOString() });
+  if (error) { toast(error.message); return false }
+  return true;
+}
+
 export async function loadAll() {
-  await Promise.all([loadProfiles(), loadCustomers()]);
+  await Promise.all([loadProfiles(), loadCustomers(), loadSettings()]);
   await loadInvoices();
 }
 
