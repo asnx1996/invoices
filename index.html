@@ -3,12 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://ripxxnmaadnpxocixbva.supabase.co wss://ripxxnmaadnpxocixbva.supabase.co; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
 <title>لوحة فواتير المبيعات</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.0/dist/umd/supabase.js" integrity="sha384-xPW3QHswsICVC2mW6BFNwMbhpLkbZ133fKOhxNx3QGGgAOJfL3O9t8r2aWn1aez6" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
 <style>
 :root{
   --bg:#F4F6F9; --surface:#FFFFFF; --surface-2:#F8FAFC; --col:#EBEFF4;
@@ -252,6 +254,7 @@ td select{min-height:36px;border:1px solid var(--border);border-radius:8px;backg
     <div class="fld hidden" id="nameFld"><label for="fn">الاسم الكامل</label><input type="text" id="fn"></div>
     <button class="btn primary" id="authBtn">دخول</button>
     <button class="link-btn" id="authSwap">ما عندك حساب؟ سجّل جديد</button>
+    <button class="link-btn" id="authForgot" style="font-weight:500;color:var(--faint)">نسيت كلمة السر؟</button>
   </div>
 </div>
 
@@ -364,22 +367,49 @@ const ldAmount=inv=>inv.ld?num(inv.value)*num(inv.ld_pct)/100:0;
 const hasTerms=inv=>!!(inv.ld||inv.exc||inv.payment==='credit'||inv.payer==='company'||num(inv.unload_amt)>0||inv.from_purch);
 
 /* ---------- تسجيل الدخول ---------- */
-let signupMode=false;
-$('#authSwap').onclick=()=>{signupMode=!signupMode;
-  $('#authBtn').textContent=signupMode?'إنشاء حساب':'دخول';
-  $('#authSub').textContent=signupMode?'سجّل حساب، وبعدها الأدمن يفعّله':'سجّل دخولك للمتابعة';
-  $('#nameFld').classList.toggle('hidden',!signupMode);
-  $('#authSwap').textContent=signupMode?'عندك حساب؟ سجّل دخول':'ما عندك حساب؟ سجّل جديد';
+// الأوضاع: login | signup | forgot (طلب رابط) | recover (تعيين كلمة جديدة بعد فتح الرابط)
+let mode='login';
+// لازم نقرأه قبل لا تمسح المكتبة الـ hash من الرابط
+let recovering=/type=recovery/.test(location.hash);
+function setMode(m){mode=m;
+  const T={login:['دخول','سجّل دخولك للمتابعة'],signup:['إنشاء حساب','سجّل حساب، وبعدها الأدمن يفعّله'],
+    forgot:['إرسال رابط','نرسلك رابط على الإيميل تغير بيه كلمة السر'],recover:['حفظ كلمة السر','اكتب كلمة السر الجديدة']}[m];
+  $('#authBtn').textContent=T[0];$('#authSub').textContent=T[1];
+  $('#nameFld').classList.toggle('hidden',m!=='signup');
+  $('#em').closest('.fld').classList.toggle('hidden',m==='recover');
+  $('#pw').closest('.fld').classList.toggle('hidden',m==='forgot');
+  $('label[for="pw"]').textContent=m==='recover'?'كلمة السر الجديدة':'كلمة السر';
+  $('#pw').autocomplete=m==='login'?'current-password':'new-password';
+  $('#authSwap').classList.toggle('hidden',m==='recover');
+  $('#authSwap').textContent=m==='login'?'ما عندك حساب؟ سجّل جديد':'رجوع لتسجيل الدخول';
+  $('#authForgot').classList.toggle('hidden',m!=='login');
   $('#authMsg').innerHTML='';
-};
+}
+$('#authSwap').onclick=()=>setMode(mode==='login'?'signup':'login');
+$('#authForgot').onclick=()=>setMode('forgot');
 function authMsg(t,cls='bad'){$('#authMsg').innerHTML=`<div class="auth-msg ${cls}">${esc(t)}</div>`}
 $('#authBtn').onclick=async()=>{
   if(!sb)return authMsg('ما مضبوطة إعدادات الاتصال');
   const email=$('#em').value.trim(),password=$('#pw').value;
-  if(!email||!password)return authMsg('اكتب الإيميل وكلمة السر');
+  if(mode==='forgot'){
+    if(!email)return authMsg('اكتب الإيميل');
+  }else if(mode==='recover'){
+    if(password.length<8)return authMsg('كلمة السر لازم 8 أحرف على الأقل');
+  }else if(!email||!password)return authMsg('اكتب الإيميل وكلمة السر');
   $('#authBtn').classList.add('busy');
   try{
-    if(signupMode){
+    if(mode==='forgot'){
+      const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
+      if(error)throw error;
+      authMsg('إذا الإيميل مسجل، راح يوصلك رابط لتغيير كلمة السر.','ok');
+    }else if(mode==='recover'){
+      const {error}=await sb.auth.updateUser({password});
+      if(error)throw error;
+      recovering=false;$('#pw').value='';setMode('login');
+      history.replaceState(null,'',location.pathname);
+      boot();
+    }else if(mode==='signup'){
+      if(password.length<8)throw new Error('كلمة السر لازم 8 أحرف على الأقل');
       const {error}=await sb.auth.signUp({email,password,options:{data:{full_name:$('#fn').value.trim()}}});
       if(error)throw error;
       authMsg('انفتح الحساب. راجع الأدمن حتى يفعّله ويحدد دورك.','ok');
@@ -394,12 +424,22 @@ $('#authBtn').onclick=async()=>{
 $('#outBtn').onclick=async()=>{await sb.auth.signOut();location.reload()};
 
 if(sb){
-  sb.auth.onAuthStateChange((_e,session)=>{session?boot():showAuth()});
-  sb.auth.getSession().then(({data})=>{data.session?boot():showAuth()});
+  // INITIAL_SESSION يغني عن getSession؛ و TOKEN_REFRESHED ما يحتاج إعادة تحميل
+  sb.auth.onAuthStateChange((e,session)=>{
+    if(!session){ME=null;if(chan){sb.removeChannel(chan);chan=null}return showAuth()}
+    // جاي من رابط "نسيت كلمة السر": نطلب الكلمة الجديدة قبل لا يدخل
+    if(e==='PASSWORD_RECOVERY'||recovering){recovering=true;setMode('recover');return showAuth()}
+    if(e==='INITIAL_SESSION'||(e==='SIGNED_IN'&&!ME))setTimeout(boot,0);
+  });
 }
 function showAuth(){$('#authView').classList.remove('hidden');$('#appView').classList.add('hidden')}
 
+let booting=false;
 async function boot(){
+  if(booting)return;booting=true;
+  try{await bootInner()}finally{booting=false}
+}
+async function bootInner(){
   const {data:{user}}=await sb.auth.getUser();
   if(!user)return showAuth();
   const {data:prof,error}=await sb.from('profiles').select('*').eq('id',user.id).maybeSingle();
@@ -427,10 +467,11 @@ async function loadAll(){
   fillFilters();render();
   if(drawerId)renderDrawer();
 }
+let reloadT;
 function subscribe(){
   if(chan)sb.removeChannel(chan);
   chan=sb.channel('board')
-    .on('postgres_changes',{event:'*',schema:'public',table:'invoices'},()=>loadAll())
+    .on('postgres_changes',{event:'*',schema:'public',table:'invoices'},()=>{clearTimeout(reloadT);reloadT=setTimeout(loadAll,400)})
     .subscribe();
 }
 
@@ -450,7 +491,7 @@ function can(a,inv){
   return false;
 }
 function waitingOn(inv){
-  if(inv.stage==='new')return 'المندوب ('+userName(inv.rep_id)+') يكمل البيانات ويرسل للحسابات';
+  if(inv.stage==='new')return 'المندوب ('+esc(userName(inv.rep_id))+') يكمل البيانات ويرسل للحسابات';
   if(inv.stage==='acc')return 'المحاسب يضيف النقل والشروط';
   if(inv.stage==='decision')return {mgr:'المدير يوافق أو يرجع للحسابات',cust:'المندوب يبلغ الزبون ويأشر الرد',wh:'المخزن يحول لمبيعات ويدخل الرقم'}[inv.sub];
   return '';
@@ -515,7 +556,7 @@ function cardHTML(inv){
   if(inv.stage==='decision')b.push(`<span class="badge b-vio">${SUB[inv.sub]}</span>`);
   if(lvl)b.push(`<span class="badge ${lvl===2?'b-bad':'b-warn'}">${ic('clock')}${d} يوم بالمرحلة</span>`);
   if(inv.returned&&isActive(inv))b.push(`<span class="badge b-warn">${ic('back')}مرجعة ${inv.returned}</span>`);
-  if(inv.ld)b.push(`<span class="badge b-ok">خصم لاحق ${inv.ld_pct}%</span>`);
+  if(inv.ld)b.push(`<span class="badge b-ok">خصم لاحق ${esc(inv.ld_pct)}%</span>`);
   if(inv.exc)b.push('<span class="badge b-bad">خصم استثنائي</span>');
   if(inv.stage==='done'&&inv.sales_no)b.push(`<span class="badge b-pri">${esc(inv.sales_no)}</span>`);
   if(inv.stage==='cancel'&&inv.cancel_reason)b.push(`<span class="badge b-bad">${esc(inv.cancel_reason.slice(0,30))}</span>`);
@@ -604,7 +645,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&drawerId&&!$('#moda
 
 function fld(label,col,val,{type='text',req=false,dis=false,full=false,opts=null,help='',rer=false}={}){
   const id='f_'+col;let input;
-  if(opts)input=`<select id="${id}" data-f="${col}" ${rer?'data-rer="1"':''} ${dis?'disabled':''}><option value="">— اختر —</option>${Object.entries(opts).map(([k,v])=>`<option value="${k}" ${val===k?'selected':''}>${v}</option>`).join('')}</select>`;
+  if(opts)input=`<select id="${id}" data-f="${col}" ${rer?'data-rer="1"':''} ${dis?'disabled':''}><option value="">— اختر —</option>${Object.entries(opts).map(([k,v])=>`<option value="${esc(k)}" ${val===k?'selected':''}>${esc(v)}</option>`).join('')}</select>`;
   else if(type==='textarea')input=`<textarea id="${id}" data-f="${col}" ${dis?'disabled':''}>${esc(val)}</textarea>`;
   else input=`<input type="${type}" id="${id}" data-f="${col}" value="${esc(val??'')}" ${dis?'disabled':''} ${type==='number'?'min="0"':''}>`;
   return `<div class="fld ${full?'full':''}"><label for="${id}">${label}${req?' <span class="req">*</span>':''}</label>${input}${help?`<div class="help">${help}</div>`:''}</div>`;
@@ -654,7 +695,7 @@ function renderDrawer(){
         ${ME.role==='admin'&&inv.stage==='new'?fld('المندوب','rep_id',inv.rep_id,{opts:Object.fromEntries(reps().map(r=>[r.id,r.full_name])),rer:true}):`<div class="fld"><label>المندوب</label><input type="text" value="${esc(userName(inv.rep_id))}" disabled></div>`}
         <div class="fld full"><label>ملف الفاتورة PDF <span class="req">*</span></label>
           <div class="pdf">${ic('file')}<span class="name">${inv.pdf_path?esc(inv.pdf_name||'ملف')+' · '+Math.round((inv.pdf_size||0)/1024)+' KB':'<span style="color:var(--faint)">ما مرفوع ملف</span>'}</span>
-          ${extra.pdfUrl?`<a class="btn sm" href="${extra.pdfUrl}" target="_blank" rel="noopener">فتح</a>`:''}
+          ${extra.pdfUrl?`<a class="btn sm" href="${esc(extra.pdfUrl)}" target="_blank" rel="noopener noreferrer">فتح</a>`:''}
           ${!eb?`<label class="btn sm" for="pdfIn">${inv.pdf_path?'تغيير':'رفع'}</label><input type="file" id="pdfIn" accept="application/pdf" class="hidden">`:''}</div>
           <div class="help">الحد الأقصى 2 MB</div></div>
       </div></section>
@@ -767,12 +808,14 @@ $('#exportBtn').onclick=()=>{
     {id:'rep',label:'المندوب',type:'select',opts:'<option value="all">الكل</option>'+reps().map(r=>`<option value="${r.id}">${esc(r.full_name)}</option>`).join('')},
     {id:'st',label:'الحالة',type:'select',opts:'<option value="all">الكل</option>'+COLS.map(c=>`<option value="${c.k}">${c.t}</option>`).join('')}
   ],v=>exportXlsx(v));
-  $('#m_from').value=new Date(now.getFullYear(),q*3,1).toISOString().slice(0,10);
-  $('#m_to').value=now.toISOString().slice(0,10);
+  // تاريخ محلي (toISOString يرجع UTC ويطلع يوم أمس قبل الساعة 3 الصبح ببغداد)
+  const ymd=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  $('#m_from').value=ymd(new Date(now.getFullYear(),q*3,1));
+  $('#m_to').value=ymd(now);
 };
 function exportXlsx(v){
   if(typeof XLSX==='undefined')return toast('مكتبة Excel ما تحملت');
-  const from=v.from?new Date(v.from).getTime():0,to=v.to?new Date(v.to).getTime()+DAY:Infinity;
+  const from=v.from?new Date(v.from+'T00:00').getTime():0,to=v.to?new Date(v.to+'T00:00').getTime()+DAY:Infinity;
   const rows=INVOICES.filter(i=>{const t=new Date(i.created_at).getTime();
     return t>=from&&t<to&&(v.rep==='all'||i.rep_id===v.rep)&&(v.st==='all'||i.stage===v.st)});
   if(!rows.length)return toast('ماكو طلبات بهاي الفلترة');
