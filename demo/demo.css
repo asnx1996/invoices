@@ -1,0 +1,10 @@
+/* إضافات النسخة التجريبية فقط */
+.demo-login{display:flex;flex-direction:column;gap:10px;margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid var(--border)}
+.demo-note{margin:0;font-size:14px;color:var(--muted);text-wrap:pretty}
+.demo-roles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.demo-roles .btn{justify-content:space-between;width:100%}
+.demo-role{font-size:12px;font-weight:600;color:var(--vio);background:var(--vio-soft);padding:1px 8px;border-radius:999px}
+.demo-login .help{margin:0}
+.demo-switch{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--faint)}
+.demo-switch select{min-height:36px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);padding:0 8px;color:var(--text)}
+@media (max-width:640px){.demo-switch{width:100%}.demo-switch select{flex:1}.demo-roles{grid-template-columns:1fr}}
