@@ -56,7 +56,10 @@ $('#newBtn').onclick = async () => {
 // الوضع الليلي
 $('#themeBtn').onclick = () => {
   const r = document.documentElement, dark = r.dataset.theme ? r.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
-  r.dataset.theme = dark ? 'light' : 'dark'; try { localStorage.setItem('ib_theme', r.dataset.theme) } catch (e) { }
+  const next = dark ? 'light' : 'dark', flip = () => { r.dataset.theme = next };
+  // تلاشي ناعم بين الوضعين بدل قفزة إضاءة مفاجئة
+  if (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) document.startViewTransition(flip); else flip();
+  try { localStorage.setItem('ib_theme', next) } catch (e) { }
 };
 try { const th = localStorage.getItem('ib_theme'); if (th) document.documentElement.dataset.theme = th } catch (e) { }
 

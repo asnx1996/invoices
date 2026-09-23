@@ -210,6 +210,55 @@ async function uploadPdf(inv, f) {
   openDrawer(inv.id); toast('انرفع الملف');
 }
 
+// ---------- سحب الدرج لإغلاقه (باللمس) ----------
+// الدرج يتبع الإصبع 1:1، وعند الترك نحسب وين راح يوقف حسب سرعة الإصبع (مثل iOS)،
+// ونكمل الحركة بنفس السرعة حتى ما يبين فاصل بين السحب والأنيميشن.
+const project = v => (v / 1000) * 0.998 / (1 - 0.998);
+const rubber = (x, dim) => (x * dim * 0.55) / (dim + 0.55 * Math.abs(x));
+
+function initSwipe(d) {
+  const scrim = $('#scrim');
+  let sw = null;
+  const reset = () => { d.classList.remove('swiping'); scrim.classList.remove('swiping'); d.style.transform = ''; scrim.style.opacity = '' };
+  d.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (e.target.closest('input,textarea,select,button,a,label,.tbl-wrap')) return;
+    sw = { id: e.pointerId, x0: e.clientX, y0: e.clientY, dx: 0, on: false, pts: [[e.clientX, e.timeStamp]] };
+  });
+  d.addEventListener('pointermove', e => {
+    if (!sw || e.pointerId !== sw.id) return;
+    const dx = e.clientX - sw.x0, dy = e.clientY - sw.y0;
+    if (!sw.on) {
+      if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) { sw = null; return } // تمرير عمودي، مو سحب
+      if (Math.abs(dx) < 10) return;
+      sw.on = true; sw.x0 = e.clientX; try { d.setPointerCapture(e.pointerId) } catch (_) { }
+      d.classList.add('swiping'); scrim.classList.add('swiping');
+    }
+    const raw = e.clientX - sw.x0, w = d.offsetWidth;
+    sw.dx = raw < 0 ? raw : rubber(raw, w); // عكس الاتجاه: مقاومة ناعمة بدل وقفة صلبة
+    sw.pts.push([e.clientX, e.timeStamp]); if (sw.pts.length > 6) sw.pts.shift();
+    d.style.transform = `translateX(${sw.dx}px)`;
+    scrim.style.opacity = String(Math.max(0, 1 + Math.min(0, sw.dx) / w));
+  });
+  const end = e => {
+    if (!sw || e.pointerId !== sw.id) return;
+    const s = sw; sw = null;
+    if (!s.on) return;
+    const [a, b] = [s.pts[0], s.pts[s.pts.length - 1]];
+    const v = b[1] > a[1] && e.type !== 'pointercancel' ? (b[0] - a[0]) / (b[1] - a[1]) * 1000 : 0; // px/s
+    const w = d.offsetWidth, shut = s.dx + project(v) < -w / 2;
+    // مدة تخلي السرعة الابتدائية للمنحنى = سرعة الإصبع (ميل --ease-out بالبداية ≈ 2.25)
+    const dist = Math.abs((shut ? -w : 0) - s.dx);
+    const t = v ? Math.min(.45, Math.max(.2, 2.25 * dist / Math.abs(v))) : .45;
+    d.style.transitionDuration = scrim.style.transitionDuration = t + 's';
+    reset();
+    if (shut) closeDrawer();
+    setTimeout(() => { d.style.transitionDuration = scrim.style.transitionDuration = '' }, t * 1000 + 50);
+  };
+  d.addEventListener('pointerup', end);
+  d.addEventListener('pointercancel', end);
+}
+
 export function initDrawer() {
   $('#scrim').onclick = closeDrawer;
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.drawerId && !$('#modal').open) closeDrawer() });
@@ -222,6 +271,7 @@ export function initDrawer() {
     if (e.target.closest('[data-costedit]')) { extra.costEdit = true; renderDrawer(); setTimeout(() => { const c = $('#f_cost'); c && c.focus() }, 30); return }
     if (e.target.closest('#cBtn')) addComment();
   });
+  initSwipe(d);
   d.addEventListener('keydown', e => { if (e.target.id === 'cIn' && e.key === 'Enter') { e.preventDefault(); addComment() } });
 
   // رقم عرض السعر ورقم الحجز: إذا انكتب واحد، الثاني يتقفل
