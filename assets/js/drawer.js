@@ -54,6 +54,8 @@ export function openDraft(rep_id) {
 }
 
 async function saveDraft() {
+  // الحقل اللي لسه بيه المؤشر (مثل القيمة) نثبّته أول، حتى ما تضيع آخر كتابة
+  const a = document.activeElement; if (a && $('#drawer').contains(a)) a.blur();
   const dr = S.draft; if (!dr) return;
   if (!dr.customer_id) { toast('اختار الزبون من القائمة أول'); const f = $('#f_customer_pick'); f && f.focus(); return }
   const btn = $('#saveDraft'); btn.classList.add('busy'); btn.setAttribute('aria-busy', 'true');
@@ -323,6 +325,9 @@ export function initDrawer() {
   onChange(() => { if (S.drawerId) renderDrawer() });
 
   const d = $('#drawer');
+  // زر "حفظ الطلب": لو الضغطة تشيل التركيز من الحقل، الـ change يعيد رسم الدرج
+  // والزر ينمسح بين ما ينضغط وما ينترك، فالضغطة تضيع. نمنع خسارة التركيز ونثبّت الحقل بـ saveDraft
+  d.addEventListener('mousedown', e => { if (e.target.closest('#saveDraft')) e.preventDefault() });
   d.addEventListener('click', e => {
     if (e.target.closest('.close')) return closeDrawer();
     const a = e.target.closest('[data-act]'); if (a) return run(a.dataset.act, S.drawerId);
