@@ -60,7 +60,7 @@ async function saveDraft() {
   if (!dr.customer_id) { toast('اختار الزبون من القائمة أول'); const f = $('#f_customer_pick'); f && f.focus(); return }
   const btn = $('#saveDraft'); btn.classList.add('busy'); btn.setAttribute('aria-busy', 'true');
   const { data, error } = await sb.from('invoices').insert({
-    rep_id: dr.rep_id, customer_id: dr.customer_id, customer: dr.customer, quote_no: dr.quote_no, res_no: dr.res_no, value: dr.value,
+    rep_id: dr.rep_id, customer_id: dr.customer_id, customer: dr.customer, quote_no: dr.quote_no ?? '', res_no: dr.res_no ?? '', value: dr.value ?? 0,
   }).select().single();
   if (error) { btn.classList.remove('busy'); btn.removeAttribute('aria-busy'); return toast(error.message) }
   const file = S.draftFile;
@@ -370,7 +370,8 @@ export function initDrawer() {
 
     const col = el.dataset.f; if (!col) return;
     let val = el.type === 'checkbox' ? el.checked : el.value;
-    if (val === '') val = null;
+    // الحقول النصية بالقاعدة ما تقبل null، الفارغ ينحفظ ''
+    if (val === '' && !['quote_no', 'res_no', 'notes'].includes(col)) val = null;
     if (['value', 'transport_amt', 'ld_pct', 'points', 'credit_months'].includes(col)) val = val === null ? null : num(val);
     if (col === 'points' && val === null) val = 0;
     const patch = { [col]: val };
