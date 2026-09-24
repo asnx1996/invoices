@@ -78,7 +78,7 @@
         notes: '', pdf_path: value ? `${id}/عرض-${id}.pdf` : null, pdf_name: value ? `عرض-${id}.pdf` : null, pdf_size: value ? 184000 + n * 3100 : null,
         cost_set: cost != null, returned: n === 5 ? 1 : 0, sales_no: stage === 'done' ? salesNo(n) : null,
         cancel_reason: stage === 'cancel' ? reasons[ci++ % 2] : null, created_at: iso(created), stage_at: iso(stageAt),
-        closed_at: ['done', 'cancel'].includes(stage) ? iso(stageAt) : null, delete_req_by: null, delete_req_at: null, delete_req_reason: null,
+        closed_at: ['done', 'cancel'].includes(stage) ? iso(stageAt) : null, delete_req_by: null, delete_req_at: null, delete_req_reason: null, urgent: n === 2 || n === 6,
       };
       if (n === 1) Object.assign(inv, { delete_req_by: 'u-rep2', delete_req_at: iso(now - DAY), delete_req_reason: 'الطلب مكرر' });
       db.invoices.push(inv);
@@ -355,6 +355,13 @@
       if (!(has('wh') || has('mgr') || has('admin'))) throw new Error('التحويل للمخزن أو المدير');
       if (blank(p_sales_no)) throw new Error('رقم المبيعات مطلوب');
       v.sales_no = p_sales_no.trim(); move(v, 'done', null, 'حول الطلب لمبيعات برقم ' + v.sales_no); return v;
+    },
+    inv_set_urgent({ p_id, p_on }) {
+      const v = getInvFor(p_id);
+      if (!['new', 'acc', 'decision'].includes(v.stage)) throw new Error('الطلب مغلق');
+      if (!(has('admin') || has('mgr') || (has('rep') && v.rep_id === session))) throw new Error('ما عندك صلاحية');
+      if (!!v.urgent === !!p_on) return null;
+      v.urgent = !!p_on; addLog(v.id, p_on ? 'أشّر الطلب طارئ' : 'شال علامة طارئ'); return null;
     },
     inv_set_cost({ p_id, p_cost }) {
       const v = getInvFor(p_id);

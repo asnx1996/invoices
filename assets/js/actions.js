@@ -80,6 +80,7 @@ export const ACTIONS = {
     v => step('inv_request_delete', { p_id: inv.id, p_reason: v.r }, 'انرسل طلب الحذف للأدمن', inv.id)),
   cancelDeleteReq: inv => step('inv_cancel_delete_request', { p_id: inv.id },
     inv.delete_req_by === S.ME.id ? 'انلغى طلب الحذف' : 'انرفض طلب الحذف', inv.id),
+  toggleUrgent: inv => step('inv_set_urgent', { p_id: inv.id, p_on: !inv.urgent }, inv.urgent ? 'انشالت علامة طارئ' : 'انأشر الطلب طارئ', inv.id),
   delete: inv => ask('حذف الطلب #' + inv.id, [], () => deleteInvoice(inv),
     { okText: 'حذف نهائي', danger: true, msg: 'ينحذف الطلب وملفه وتعليقاته وسجله نهائياً، وما يرجع.' }),
 };

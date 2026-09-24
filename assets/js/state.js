@@ -43,6 +43,7 @@ export const reps = () => S.PROFILES.filter(p => p.active && (p.roles || []).inc
 export const getInv = id => id === 'draft' ? S.draft : S.INVOICES.find(i => i.id === +id);
 export const daysIn = inv => (Date.now() - new Date(inv.stage_at).getTime()) / DAY;
 export const isActive = inv => ['new', 'acc', 'decision'].includes(inv.stage);
+export const isUrgent = inv => !!inv.urgent && isActive(inv);
 export const ageLevel = inv => { if (!isActive(inv)) return 0; const d = daysIn(inv); return d >= 3 ? 2 : d >= 2 ? 1 : 0 };
 export const ldAmount = inv => inv.ld ? num(inv.value) * num(inv.ld_pct) / 100 : 0;
 export const transportAdded = inv => inv.payer === 'customer' ? num(inv.transport_amt) : 0;

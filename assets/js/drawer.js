@@ -1,4 +1,4 @@
-import { S, COLS, SUB, PAY, PAY_LEGACY, PAYER, PAYER_LEGACY, MONTHS, POINT_RATE, hasRole, getInv, userName, reps, isActive,
+import { S, COLS, SUB, PAY, PAY_LEGACY, PAYER, PAYER_LEGACY, MONTHS, POINT_RATE, hasRole, getInv, userName, reps, isActive, isUrgent,
   ldAmount, transportAdded, totalAfterTransport, pointsPct, onChange } from './state.js';
 import { renderBoard } from './board.js';
 import { $, esc, num, fmt, money, pct, dt, dOnly, ic, toast, ask, cur, numAttrs, numVal } from './util.js';
@@ -78,7 +78,7 @@ export function hideDrawer() {
   if (!d.classList.contains('open')) return;
   d.classList.remove('open'); $('#scrim').classList.remove('open'); d.inert = true; $('#appView').inert = false;
   // الكارت ممكن انرسم من جديد، فندور عليه بالرقم
-  const back = returnFocus && returnFocus.isConnected ? returnFocus : (id != null && document.querySelector(`.card[data-id="${id}"]`));
+  const back = returnFocus && returnFocus.isConnected ? returnFocus : (id != null && document.querySelector(`.card[data-id="${id}"] .card-link`));
   if (back) back.focus({ preventScroll: true });
   returnFocus = null;
 }
@@ -122,7 +122,7 @@ function actionsHTML(inv) {
     btn('approve', 'موافقة على الشروط', 'ok', 'check'), btn('returnToAcc', 'إرجاع للحسابات', 'bad', 'back'),
     btn('custAccept', 'الزبون موافق', 'ok', 'check'), btn('custRefuse', 'الزبون رفض', 'bad', 'x'),
     btn('complete', 'تحويل لمبيعات + رقم المبيعات', 'ok', 'check')].join('');
-  const small = [btn('requestDelete', 'طلب حذف', 'bad sm', 'trash'), inv.delete_req_at ? '' : btn('delete', 'حذف', 'bad sm', 'trash')].join('');
+  const small = [can('toggleUrgent', inv) ? `<button class="btn sm ${inv.urgent ? '' : 'bad'}" data-act="toggleUrgent" aria-pressed="${!!inv.urgent}">${ic('flame')}${inv.urgent ? 'شيل علامة طارئ' : 'طارئ'}</button>` : '', btn('requestDelete', 'طلب حذف', 'bad sm', 'trash'), inv.delete_req_at ? '' : btn('delete', 'حذف', 'bad sm', 'trash')].join('');
   let wait;
   if (inv.stage === 'done') wait = `تمت برقم مبيعات <b>${esc(inv.sales_no)}</b> — ${dOnly(inv.closed_at)}`;
   else if (inv.stage === 'cancel') wait = `ملغاة: ${esc(inv.cancel_reason)}`;
@@ -201,6 +201,7 @@ export function renderDrawer() {
       <div class="sub">${draft ? 'غير محفوظ' : '#' + inv.id} · ${esc(userName(inv.rep_id))} · ${dOnly(inv.created_at)}</div>
       <h3>${esc(inv.customer) || 'طلب جديد'}</h3>
       <span class="badge" style="background:var(--surface-2);color:${col.c};border:1px solid var(--border)">${col.t}${inv.stage === 'decision' ? ' · ' + SUB[inv.sub] : ''}</span>
+      ${isUrgent(inv) ? `<span class="badge b-urgent">${ic('flame')}طارئ</span>` : ''}
     </div>
     <button class="icon-btn close" aria-label="إغلاق">${ic('x')}</button>
   </div>

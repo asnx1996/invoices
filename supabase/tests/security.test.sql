@@ -292,6 +292,18 @@ begin
   perform pg_temp.as_user(u_admin);
   perform pg_temp.t_ok('أدمن: يغير العملة', $q$update public.app_settings set value = '$' where key = 'currency'$q$, 1);
 
+  -- ---------------- علامة طارئ ----------------
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_ok('مندوب: يأشر طلبه طارئ (حتى بالقرار)', format('select public.inv_set_urgent(%s, true)', i_dec));
+  perform pg_temp.t_eq('طارئ: انحفظ', format('select urgent::text from public.invoices where id = %s', i_dec), 'true');
+  perform pg_temp.t_denied('مندوب: ما يعدل طارئ مباشرة', format('update public.invoices set urgent = false where id = %s', i_new1));
+  perform pg_temp.t_denied('مندوب: ما يأشر طلب غيره', format('select public.inv_set_urgent(%s, true)', i_acc2));
+  perform pg_temp.as_user(u_acc);
+  perform pg_temp.t_denied('محاسب: ما يأشر طارئ', format('select public.inv_set_urgent(%s, true)', i_acc));
+  perform pg_temp.as_user(u_mgr);
+  perform pg_temp.t_ok('مدير: يشيل علامة طارئ', format('select public.inv_set_urgent(%s, false)', i_dec));
+  perform pg_temp.t_eq('طارئ: انشالت', format('select urgent::text from public.invoices where id = %s', i_dec), 'false');
+
   -- ---------------- النتيجة ----------------
   perform pg_temp.as_owner();
   msg := current_setting('tst.fail', true);

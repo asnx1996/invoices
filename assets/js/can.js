@@ -17,6 +17,7 @@ export function can(a, inv) {
     case 'approve': case 'returnToAcc': return inv.stage === 'decision' && inv.sub === 'mgr' && (admin || mgr);
     case 'custAccept': case 'custRefuse': return inv.stage === 'decision' && inv.sub === 'cust' && (admin || mgr || (rep && own));
     case 'complete': return inv.stage === 'decision' && inv.sub === 'wh' && (admin || mgr || wh);
+    case 'toggleUrgent': return ['new', 'acc', 'decision'].includes(inv.stage) && (admin || mgr || (rep && own));
     case 'delete': return admin;
     case 'requestDelete': return !admin && !inv.delete_req_at;
     case 'cancelDeleteReq': return !!inv.delete_req_at && (admin || inv.delete_req_by === S.ME.id);
