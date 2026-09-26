@@ -18,9 +18,13 @@ assets/js/
   actions.js             الإجراءات (إرسال، موافقة، حذف...)
   board.js / drawer.js   اللوحة وتفاصيل الطلب
   users.js / customers.js / reports.js / export.js / backup.js
+  notifications.js       جرس الإشعارات (تغيّر المرحلة + المنشن)
+  mentions.js            @ بالتعليقات والملاحظات
+  avatars.js             الأفتارات الجاهزة (مرسومة SVG بالكود)
 sw.js, manifest.webmanifest, icons/   تطبيق (PWA)
 supabase/
   migrations/            تعديلات القاعدة بالترتيب
+  functions/push/        Edge Function تبعث تنبيهات الموبايل
   scripts/audit.sql      فحص أمني (قراءة فقط)
   tests/                 اختبارات الصلاحيات
 tests/run-db-tests.mjs   يشغّل الاختبارات على Postgres محلي
@@ -45,6 +49,10 @@ tests/run-db-tests.mjs   يشغّل الاختبارات على Postgres محل�
 | `002_hardening.sql` | ✅ منفّذ |
 | `003_admin_users.sql` | ✅ منفّذ |
 | `004_business_rules.sql` | قواعد الشغل الجديدة |
+| `005_settings_transport.sql` | العملة + النقل |
+| `006_urgent.sql` | ✅ منفّذ — علامة طارئ |
+| `007_notifications_avatars.sql` | الإشعارات + المنشن + الأفتار |
+| `008_notify_more_push.sql` | إشعار التعليق + "دورك" + التذكير اليومي + Web Push (شوف `docs/PUSH.md`) |
 
 ## الاختبارات
 
@@ -53,7 +61,7 @@ npm install
 npm test
 ```
 
-تشغّل كل التعديلات على Postgres محلي (PGlite) وبعدها ~90 اختبار صلاحيات: الزائر، الحساب الموقوف، وكل دور، ومعادلة الربح...
+تشغّل كل التعديلات على Postgres محلي (PGlite) وبعدها ~150 اختبار صلاحيات: الزائر، الحساب الموقوف، وكل دور، ومعادلة الربح...
 وتشتغل وحدها على GitHub مع كل push (تبويب Actions).
 
 تكدر تشغّل `supabase/tests/security.test.sql` على القاعدة الحقيقية من SQL Editor. ما يغير شي لأن كل التعديلات ترجع بالنهاية.

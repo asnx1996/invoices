@@ -1,5 +1,6 @@
 import { S, COLS, SUB, MONTHS, getInv, userName, reps, isActive, isUrgent, ageLevel, daysIn, hasRole } from './state.js';
-import { $, $$, esc, num, money, pct, ic, initials, toast, ask } from './util.js';
+import { $, $$, esc, num, money, pct, ic, toast, ask } from './util.js';
+import { avatarHTML } from './avatars.js';
 import { can } from './can.js';
 import { run, waitingOn } from './actions.js';
 import { openDrawer } from './drawer.js';
@@ -70,7 +71,7 @@ function cardHTML(inv) {
   const refs = [inv.quote_no && 'عرض ' + inv.quote_no, inv.res_no && 'حجز ' + inv.res_no].filter(Boolean).join(' · ') || 'بدون رقم';
   const rep = userName(inv.rep_id);
   return `<article class="card${urgent ? ' urgent' : ''}${open ? ' open' : ''}" draggable="true" data-id="${inv.id}">
-    <div class="top"><span class="id">#${inv.id}</span>
+    <div class="top"><span class="id">#${inv.id}</span><span class="top-av" title="${esc(rep)}">${avatarHTML(inv.rep_id, 22)}</span>
       <button type="button" class="more-btn" aria-expanded="${open}" aria-controls="cx${inv.id}" aria-label="${open ? 'إخفاء' : 'عرض'} تفاصيل الطلب ${inv.id}">${ic('chev')}</button></div>
     <button type="button" class="card-link cust">${esc(inv.customer) || '<span style="color:var(--faint)">(بدون اسم)</span>'}</button>
     ${num(inv.value) ? `<div class="val">${money(inv.value)}</div>` : ''}
@@ -80,7 +81,7 @@ function cardHTML(inv) {
       ${b.length ? `<div class="badges">${b.join('')}</div>` : ''}
       <div class="meta">
         ${inv.pdf_path ? `<span>${ic('clip')}1</span>` : `<span style="color:var(--bad)">${ic('clip')}0</span>`}
-        <span class="rep"><span class="avatar" aria-hidden="true">${esc(initials(rep))}</span>${esc(rep)}</span>
+        <span class="rep">${esc(rep)}</span>
       </div></div></div></article>`;
 }
 

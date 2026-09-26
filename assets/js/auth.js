@@ -2,6 +2,8 @@ import { LOGIN_DOMAIN } from './config.js';
 import { S, rolesText } from './state.js';
 import { sb, configured, loadAll, subscribe, unsubscribe } from './api.js';
 import { $, esc } from './util.js';
+import { paintMe } from './avatars.js';
+import { loadNotifs, subscribeNotifs, unsubscribeNotifs, dropPush } from './notifications.js';
 
 const loginEmail = u => { u = u.trim().toLowerCase(); return u.includes('@') ? u : u + LOGIN_DOMAIN };
 function authMsg(t, cls = 'bad') { $('#authMsg').innerHTML = `<div class="auth-msg ${cls}">${esc(t)}</div>` }
@@ -23,9 +25,12 @@ async function boot(onReady) {
     $('#authView').classList.add('hidden'); $('#appView').classList.remove('hidden');
     $('#meName').textContent = S.ME.full_name || user.email;
     $('#rolePill').textContent = rolesText(S.ME.roles);
+    paintMe();
     onReady();
     await loadAll();
+    paintMe();
     subscribe();
+    loadNotifs(); subscribeNotifs();
   } finally { booting = false }
 }
 
@@ -45,11 +50,11 @@ export function initAuth(onReady) {
     $('#authBtn').classList.remove('busy');
   };
   ['#em', '#pw'].forEach(s => $(s).addEventListener('keydown', e => { if (e.key === 'Enter') $('#authBtn').click() }));
-  $('#outBtn').onclick = async () => { await sb.auth.signOut(); location.reload() };
+  $('#outBtn').onclick = async () => { await dropPush(); await sb.auth.signOut(); location.reload() };
 
   // INITIAL_SESSION يغني عن getSession؛ TOKEN_REFRESHED ما يحتاج إعادة تحميل
   sb.auth.onAuthStateChange((e, session) => {
-    if (!session) { S.ME = null; unsubscribe(); return showAuth() }
+    if (!session) { S.ME = null; unsubscribe(); unsubscribeNotifs(); return showAuth() }
     if (e === 'INITIAL_SESSION' || (e === 'SIGNED_IN' && !S.ME)) setTimeout(() => boot(onReady), 0);
   });
 }

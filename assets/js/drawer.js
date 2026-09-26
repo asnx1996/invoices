@@ -5,6 +5,8 @@ import { $, esc, num, fmt, money, pct, dt, dOnly, ic, toast, ask, cur, numAttrs,
 import { sb, rpc, refreshInvoice } from './api.js';
 import { can } from './can.js';
 import { run, waitingOn, missingBasic, missingTerms } from './actions.js';
+import { avatarHTML } from './avatars.js';
+import { highlightMentions, MENTION_HELP } from './mentions.js';
 
 let extra = { comments: [], log: [], pdfUrl: null, costEdit: false };
 let returnFocus = null;
@@ -166,7 +168,7 @@ function termsHTML(inv) {
       <div class="term-box">${tog('خصم لاحق', 'ld', inv.ld, et)}
         ${inv.ld ? `<div class="grid">${fld('نسبة الخصم %', 'ld_pct', inv.ld_pct, { type: 'number', req: true, dis: et, rer: true })}
           <div class="fld"><div class="help" style="margin-top:28px">مبلغ الخصم: <b>${money(ldAmount(inv))}</b></div></div></div>` : ''}</div>
-      ${fld('ملاحظات', 'notes', inv.notes, { type: 'textarea', dis: et, full: true })}
+      ${fld('ملاحظات', 'notes', inv.notes, { type: 'textarea', dis: et, full: true, help: et ? '' : MENTION_HELP }).replace('data-f="notes"', 'data-f="notes" data-mention="1"')}
     </div></section>`;
 }
 
@@ -224,8 +226,8 @@ export function renderDrawer() {
       </div></section>
     ${!draft && can('seeTerms', inv) ? termsHTML(inv) : ''}
     ${draft ? '' : `<section class="blk"><h4>التعليقات</h4>
-      ${extra.comments.map(c => `<div class="comment ${c.is_system ? 'sys' : ''}"><div class="by">${esc(userName(c.author))} · ${dt(c.at)}</div>${esc(c.body)}</div>`).join('') || '<div class="help" style="margin-bottom:8px">لا توجد تعليقات</div>'}
-      <div class="add-c"><input type="text" id="cIn" placeholder="اكتب تعليق..." aria-label="تعليق"><button class="btn primary" id="cBtn">إرسال</button></div></section>
+      ${extra.comments.map(c => `<div class="comment ${c.is_system ? 'sys' : ''}${c.author === S.ME.id ? ' mine' : ''}">${avatarHTML(c.author, 30, 'c-av')}<div class="c-main"><div class="by"><b>${esc(userName(c.author))}</b> · ${dt(c.at)}</div><div class="c-body">${highlightMentions(esc(c.body))}</div></div></div>`).join('') || '<div class="help" style="margin-bottom:8px">لا توجد تعليقات</div>'}
+      <div class="add-c">${avatarHTML(S.ME, 30, 'c-av')}<input type="text" id="cIn" data-mention="1" autocomplete="off" placeholder="اكتب تعليق... (@ حتى تذكر شخص)" aria-label="تعليق"><button class="btn primary" id="cBtn">إرسال</button></div></section>
     <details class="more blk" data-more="log" ${shown.log ? 'open' : ''}><summary>سجل الحركة${extra.log.length ? ` (${extra.log.length})` : ''}</summary>
       <ul class="timeline">${extra.log.slice().reverse().map(l => `<li><div>${esc(userName(l.actor))}: ${esc(l.body)}</div><div class="t">${dt(l.at)}</div></li>`).join('') || '<li class="help">—</li>'}</ul></details>`}
   </div>`;

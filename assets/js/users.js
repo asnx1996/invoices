@@ -2,6 +2,7 @@ import { S, ROLES, rolesText, changed } from './state.js';
 import { sb, rpc, loadProfiles, saveSetting } from './api.js';
 import { $, esc, ic, ask, toast, genPw, cur, setCurrency } from './util.js';
 import { backupNow } from './backup.js';
+import { avatarHTML, openAvatarPicker } from './avatars.js';
 
 let LOGINS = {};
 
@@ -12,7 +13,7 @@ export async function renderUsers() {
   $('#usersTbl').innerHTML = `<thead><tr><th>الاسم</th><th>اسم المستخدم</th><th>الأدوار</th><th>مفعّل</th><th></th></tr></thead><tbody>${S.PROFILES.map(u => {
     const me = u.id === S.ME.id, roles = u.roles || [];
     return `<tr class="${u.active ? '' : 'off'}">
-    <td>${esc(u.full_name) || '<span class="help">بدون اسم</span>'}</td>
+    <td><span class="u-name"><button type="button" class="u-av" data-uav="${esc(u.id)}" aria-label="تغيير صورة ${esc(u.full_name)}" title="تغيير الصورة">${avatarHTML(u, 32)}</button>${esc(u.full_name) || '<span class="help">بدون اسم</span>'}</span></td>
     <td dir="ltr" style="text-align:end">${esc(LOGINS[u.id] || '—')}</td>
     <td><div class="roles">${Object.entries(ROLES).map(([k, v]) =>
       `<label class="role-chk"><input type="checkbox" data-urole="${esc(u.id)}" value="${k}" ${roles.includes(k) ? 'checked' : ''} ${me && k === 'admin' ? 'disabled' : ''}>${v}</label>`).join('')}</div></td>
@@ -77,6 +78,8 @@ export function initUsers() {
   });
 
   $('#usersTbl').addEventListener('click', e => {
+    const av = e.target.closest('[data-uav]');
+    if (av) return openAvatarPicker(av.dataset.uav);
     const b = e.target.closest('[data-upw]'); if (!b) return;
     const id = b.dataset.upw, u = S.PROFILES.find(p => p.id === id) || {};
     ask('تغيير رمز: ' + (u.full_name || ''), [{ id: 'p', label: 'الرمز الجديد (8 أحرف أو أكثر)', type: 'text', req: true, value: genPw() }], async v => {

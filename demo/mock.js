@@ -21,12 +21,12 @@
 
   // ---------- بيانات البداية ----------
   const USERS = [
-    { id: 'u-admin', login: 'admin', full_name: 'أحمد الأدمن', roles: ['admin'] },
-    { id: 'u-rep1', login: 'ali', full_name: 'علي حسن', roles: ['rep'] },
-    { id: 'u-rep2', login: 'sara', full_name: 'سارة كريم', roles: ['rep'] },
-    { id: 'u-acc', login: 'hussein', full_name: 'حسين المحاسب', roles: ['acc'] },
-    { id: 'u-mgr', login: 'omar', full_name: 'عمر المدير', roles: ['mgr'] },
-    { id: 'u-wh', login: 'zaid', full_name: 'زيد المخزن', roles: ['wh'] },
+    { id: 'u-admin', login: 'admin', full_name: 'أحمد الأدمن', roles: ['admin'], avatar: 'm2' },
+    { id: 'u-rep1', login: 'ali', full_name: 'علي حسن', roles: ['rep'], avatar: 'm6' },
+    { id: 'u-rep2', login: 'sara', full_name: 'سارة كريم', roles: ['rep'], avatar: 'f1' },
+    { id: 'u-acc', login: 'hussein', full_name: 'حسين المحاسب', roles: ['acc'], avatar: 'm11' },
+    { id: 'u-mgr', login: 'omar', full_name: 'عمر المدير', roles: ['mgr'], avatar: 'm5' },
+    { id: 'u-wh', login: 'zaid', full_name: 'زيد المخزن', roles: ['wh'], avatar: null },
   ];
   const CUSTOMERS = ['شركة النور للتجارة العامة', 'مؤسسة الرافدين', 'معرض بغداد للأجهزة', 'شركة دجلة للمقاولات', 'مكتب الفرات الهندسي',
     'أسواق الكرادة', 'شركة بابل للتوريدات', 'مجموعة الزوراء', 'مطبعة المنصور', 'شركة أربيل للإنشاء', 'مخازن البصرة الحديثة',
@@ -34,11 +34,11 @@
 
   function seed() {
     const db = {
-      seq: { invoices: 1100, customers: 100, invoice_comments: 1, invoice_log: 1, invoice_stage_log: 1 },
-      profiles: USERS.map(u => ({ id: u.id, full_name: u.full_name, roles: u.roles, role: u.roles[0], active: true, created_at: iso(now - 200 * DAY) })),
+      seq: { invoices: 1100, customers: 100, invoice_comments: 1, invoice_log: 1, invoice_stage_log: 1, notifications: 1 },
+      profiles: USERS.map(u => ({ id: u.id, full_name: u.full_name, roles: u.roles, role: u.roles[0], avatar: u.avatar, active: true, created_at: iso(now - 200 * DAY) })),
       logins: Object.fromEntries(USERS.map(u => [u.id, u.login])),
       customers: CUSTOMERS.map((name, i) => ({ id: i + 1, name, phone: '0770' + String(1234567 + i * 7919).slice(0, 7), notes: '', active: true, created_at: iso(now - 190 * DAY) })),
-      invoices: [], invoice_costs: [], invoice_comments: [], invoice_log: [], invoice_stage_log: [],
+      invoices: [], invoice_costs: [], invoice_comments: [], invoice_log: [], invoice_stage_log: [], notifications: [],
       app_settings: [{ key: 'currency', value: 'د.ع', updated_at: iso(now) }],
       files: {},
     };
@@ -105,16 +105,32 @@
     const first = db.invoices[2].id;
     db.invoice_comments.push(
       { id: db.seq.invoice_comments++, invoice_id: first, author: 'u-acc', body: 'الزبون يريد الآجل شهرين بدل شهر، ثبتتها.', is_system: false, at: iso(now - 0.8 * DAY) },
-      { id: db.seq.invoice_comments++, invoice_id: first, author: 'u-rep1', body: 'تمام، بلغته.', is_system: false, at: iso(now - 0.5 * DAY) },
+      { id: db.seq.invoice_comments++, invoice_id: first, author: 'u-rep1', body: 'تمام، بلغته. @حسين المحاسب ثبّت النقل هم', is_system: false, at: iso(now - 0.5 * DAY) },
       { id: db.seq.invoice_comments++, invoice_id: db.invoices[5].id, author: 'u-mgr', body: 'إرجاع للحسابات: نسبة الخصم عالية، راجعوها', is_system: true, at: iso(now - 3 * DAY) },
     );
+    // إشعارات تجريبية
+    const N = (user_id, inv, kind, actor, data, ago, read) => db.notifications.push({ id: db.seq.notifications++, user_id, invoice_id: inv.id, kind, actor,
+      data: { customer: inv.customer, ...data }, created_at: iso(now - ago * DAY), read_at: read ? iso(now - ago * DAY + 3600e3) : null });
+    const I = db.invoices;
+    N('u-acc', I[2], 'mention', 'u-rep1', { src: 'comment', text: 'تمام، بلغته. @حسين المحاسب ثبّت النقل هم' }, 0.5, false);
+    N('u-rep1', I[7], 'stage', 'u-mgr', { stage: 'decision', sub: 'cust', from_stage: 'decision', from_sub: 'mgr' }, 1.5, false);
+    N('u-rep1', I[6], 'stage', 'u-acc', { stage: 'decision', sub: 'mgr', from_stage: 'acc' }, 2.2, false);
+    N('u-rep1', I[16], 'stage', 'u-wh', { stage: 'done', from_stage: 'decision', from_sub: 'wh' }, 14, true);
+    N('u-rep2', I[5], 'stage', 'u-acc', { stage: 'decision', sub: 'mgr', from_stage: 'acc' }, 1, false);
+    N('u-mgr', I[5], 'turn', 'u-acc', { stage: 'decision', sub: 'mgr', from_stage: 'acc' }, 1, false);
+    N('u-mgr', I[6], 'turn', 'u-acc', { stage: 'decision', sub: 'mgr', from_stage: 'acc' }, 2.2, false);
+    N('u-acc', I[3], 'late', null, { stage: 'acc', days: 3 }, 0.2, false);
+    N('u-wh', I[9], 'late', null, { stage: 'decision', sub: 'wh', days: 4 }, 0.2, false);
+    N('u-rep1', I[2], 'comment', 'u-acc', { text: 'الزبون يريد الآجل شهرين بدل شهر، ثبتتها.' }, 0.8, false);
+    N('u-rep2', I[17], 'stage', 'u-mgr', { stage: 'cancel', from_stage: 'decision', from_sub: 'cust', reason: I[17].cancel_reason }, 25, true);
+    db.v2 = true;
     return db;
   }
   function isActiveStage(s) { return ['new', 'acc', 'decision'].includes(s) }
 
   let db;
   try { db = JSON.parse(store.get(KEY)) } catch (e) { db = null }
-  if (!db || !db.invoices) db = seed();
+  if (!db || !db.invoices || !db.notifications || !db.v2) db = seed();
   const save = () => store.set(KEY, JSON.stringify({ ...db, files: {} }));
   save();
 
@@ -133,6 +149,7 @@
     profiles: p => active() || p.id === session,
     customers: () => active(),
     app_settings: () => active(),
+    notifications: n => n.user_id === session,
   };
   const readable = (t, r) => {
     if (canRead[t]) return canRead[t](r);
@@ -141,6 +158,31 @@
   };
 
   function addLog(id, body) { db.invoice_log.push({ id: db.seq.invoice_log++, invoice_id: id, actor: session, body, at: iso(Date.now()) }) }
+  // ---------- الإشعارات (نفس تريغرات 007) ----------
+  const canSeeAs = (uid, i) => {
+    const p = db.profiles.find(x => x.id === uid); if (!p || !p.active) return false; const r = p.roles;
+    return r.includes('admin') || r.includes('mgr') || r.includes('acc') || (r.includes('wh') && ['decision', 'done'].includes(i.stage)) || (r.includes('rep') && i.rep_id === uid);
+  };
+  function mentioned(text) {
+    let t = String(text || ''); const out = [];
+    if (!t.includes('@')) return out;
+    [...db.profiles].filter(p => p.active && p.full_name.trim()).sort((a, b) => b.full_name.trim().length - a.full_name.trim().length).forEach(p => {
+      const tag = '@' + p.full_name.trim(), k = t.indexOf(tag);
+      if (k < 0 || /[A-Za-z0-9_\u0600-\u06FF]/.test(t[k + tag.length] || '')) return;
+      out.push(p.id); t = t.split(tag).join(' ');
+    });
+    return out;
+  }
+  // منو دوره بهاي المرحلة (نفس turn_users بـ 008)
+  const turnUsers = (stage, sub, rep) => {
+    if (stage === 'new' || (stage === 'decision' && sub === 'cust')) return rep ? [rep] : [];
+    const role = stage === 'acc' ? 'acc' : stage === 'decision' ? { mgr: 'mgr', wh: 'wh' }[sub] : null;
+    return role ? db.profiles.filter(p => p.active && p.roles.includes(role)).map(p => p.id) : [];
+  };
+  function notify(user_id, inv, kind, data) {
+    if (!user_id || user_id === session || !canSeeAs(user_id, inv)) return;
+    db.notifications.push({ id: db.seq.notifications++, user_id, invoice_id: inv.id, kind, actor: session, data: { customer: inv.customer, ...data }, created_at: iso(Date.now()), read_at: null });
+  }
   function stageLog(inv) { db.invoice_stage_log.push({ id: db.seq.invoice_stage_log++, invoice_id: inv.id, key: inv.stage === 'decision' ? 'decision:' + inv.sub : inv.stage, entered_at: iso(Date.now()) }) }
 
   const FIELD = { customer_id: 'الزبون', quote_no: 'رقم عرض السعر', res_no: 'رقم الحجز', value: 'قيمة الفاتورة', payment: 'طريقة السداد', credit_months: 'مدة الآجل',
@@ -161,7 +203,9 @@
       }
     }
     if ('customer_id' in patch) { const c = db.customers.find(x => x.id === patch.customer_id); if (c) patch.customer = c.name }
+    const before = mentioned(inv.notes);
     Object.assign(inv, patch);
+    if ('notes' in patch) mentioned(inv.notes).filter(u => !before.includes(u)).forEach(u => notify(u, inv, 'mention', { src: 'notes', text: String(inv.notes).slice(0, 160) }));
     keys.filter(k => FIELD[k]).forEach(k => addLog(inv.id, 'عدّل ' + FIELD[k]));
     return null;
   }
@@ -199,6 +243,7 @@
     or(expr) { const fs = parseOr(expr); this.f.push(r => fs.some(fn => fn(r))); return this }
     order(c, o = {}) { this.ord.push([c, o.ascending !== false]); return this }
     range(a, b) { this.rng = [a, b]; return this }
+    limit(n) { this.rng = [0, n - 1]; return this }
     single() { this.one = 'single'; return this }
     maybeSingle() { this.one = 'maybe'; return this }
     then(res, rej) { return new Promise(r => setTimeout(r, 60)).then(() => this.run()).then(res, rej) }
@@ -226,7 +271,7 @@
           if (t === 'invoices') {
             if (!(has('admin') || (has('rep') && r.rep_id === session))) return err('new row violates row-level security policy for table "invoices"', '42501');
             const c = db.customers.find(x => x.id === r.customer_id);
-            Object.assign(r, { id: ++db.seq.invoices, stage: 'new', sub: null, customer: c ? c.name : r.customer || '', points: 0, ld: false, cost_set: false, returned: 0,
+            Object.assign(r, { id: ++db.seq.invoices, created_by: session, stage: 'new', sub: null, customer: c ? c.name : r.customer || '', points: 0, ld: false, cost_set: false, returned: 0,
               created_at: iso(Date.now()), stage_at: iso(Date.now()), closed_at: null, pdf_path: null, delete_req_at: null });
             db.invoices.push(r); addLog(r.id, 'أنشأ الطلب'); stageLog(r);
           } else if (t === 'customers') {
@@ -239,6 +284,9 @@
             if (!inv || !canRead.invoices(inv)) return err('ما عندك صلاحية', '42501');
             Object.assign(r, { id: db.seq.invoice_comments++, author: session, is_system: false, at: iso(Date.now()) });
             db.invoice_comments.push(r);
+            const m = mentioned(r.body);
+            m.forEach(u => notify(u, inv, 'mention', { src: 'comment', text: String(r.body).slice(0, 160) }));
+            [...new Set([inv.rep_id, inv.created_by].filter(Boolean))].filter(u => !m.includes(u)).forEach(u => notify(u, inv, 'comment', { text: String(r.body).slice(0, 160) }));
           } else return err('ما عندك صلاحية', '42501');
           out.push(r);
         }
@@ -256,6 +304,7 @@
         for (const r of list) {
           if (t === 'invoices') { const e = updateInvoice(r, { ...this.payload }); if (e) return err(e, '42501') }
           else if (t === 'customers') { if (!has('admin')) return err('ما عندك صلاحية', '42501'); Object.assign(r, this.payload) }
+          else if (t === 'notifications') { if (Object.keys(this.payload).some(k => k !== 'read_at')) return err('permission denied for table notifications', '42501'); Object.assign(r, this.payload) }
           else if (t === 'profiles') {
             if (!has('admin')) return err('ما عندك صلاحية', '42501');
             if (r.id === session && (this.payload.active === false || (this.payload.roles && !this.payload.roles.includes('admin')))) return err('ما تكدر توقف حسابك أو تشيل الأدمن عن نفسك');
@@ -284,7 +333,11 @@
   }
   const blank = s => String(s ?? '').trim() === '';
   function move(v, stage, sub, body) {
+    const from = { from_stage: v.stage, from_sub: v.sub };
     v.stage = stage; v.sub = sub; v.stage_at = iso(Date.now());
+    const owners = [...new Set([v.rep_id, v.created_by].filter(Boolean))], d = { stage, sub, ...from, reason: stage === 'cancel' ? v.cancel_reason : null };
+    owners.forEach(u => notify(u, v, 'stage', d));
+    turnUsers(stage, sub, v.rep_id).filter(u => !owners.includes(u)).forEach(u => notify(u, v, 'turn', d));
     if (['done', 'cancel'].includes(stage)) v.closed_at = v.stage_at;
     stageLog(v); addLog(v.id, body);
   }
@@ -390,7 +443,7 @@
     inv_delete({ p_id }) {
       if (!has('admin')) throw new Error('الحذف للأدمن فقط');
       const v = getInvFor(p_id), path = v.pdf_path;
-      ['invoice_comments', 'invoice_log', 'invoice_stage_log', 'invoice_costs'].forEach(t => db[t] = db[t].filter(r => r.invoice_id !== v.id));
+      ['invoice_comments', 'invoice_log', 'invoice_stage_log', 'invoice_costs', 'notifications'].forEach(t => db[t] = db[t].filter(r => r.invoice_id !== v.id));
       db.invoices = db.invoices.filter(r => r.id !== v.id);
       return path;
     },
@@ -440,6 +493,15 @@
         stages: order.filter(k => durs[k]).map(k => ({ key: k, avg_days: avg(durs[k]), n: durs[k].length })),
         cancel_reasons: Object.entries(reasons).map(([reason, n]) => ({ reason, n })).sort((a, b) => b.n - a.n),
       };
+    },
+    push_subscribe() { return null },
+    push_unsubscribe() { return null },
+    set_avatar({ p_user, p_avatar }) {
+      if (!active()) throw new Error('الحساب غير مفعّل');
+      if (p_user !== session && !has('admin')) throw new Error('ما عندك صلاحية');
+      if (p_avatar && !/^[a-z0-9-]{1,24}$/.test(p_avatar)) throw new Error('صورة غير معروفة');
+      const p = db.profiles.find(x => x.id === p_user); if (!p) throw new Error('المستخدم غير موجود');
+      p.avatar = p_avatar || null; return null;
     },
     admin_list_logins() {
       if (!has('admin')) throw new Error('للأدمن فقط');

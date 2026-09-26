@@ -9,6 +9,9 @@ import { initUsers, renderUsers } from './users.js';
 import { initCustomers, renderCustomers } from './customers.js';
 import { initReports, renderReports } from './reports.js';
 import { initExport } from './export.js';
+import { initNotifs } from './notifications.js';
+import { initMentions } from './mentions.js';
+import { openAvatarPicker } from './avatars.js';
 
 const VIEWS = { board: '#viewBoard', customers: '#viewCustomers', reports: '#viewReports', users: '#viewUsers' };
 let view = 'board';
@@ -90,7 +93,8 @@ function syncThemeBtn() {
 try { const th = localStorage.getItem('ib_theme'); if (th) document.documentElement.dataset.theme = th } catch (e) { }
 syncThemeBtn();
 
-initBoard(); initDrawer(); initUsers(); initCustomers(); initReports(); initExport();
+initBoard(); initDrawer(); initUsers(); initCustomers(); initReports(); initExport(); initNotifs(); initMentions();
+$('#meBtn').onclick = () => openAvatarPicker();
 initAuth(onReady);
 
 // تطبيق (PWA): يشتغل من الشاشة الرئيسية

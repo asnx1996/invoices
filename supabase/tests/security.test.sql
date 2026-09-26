@@ -304,6 +304,121 @@ begin
   perform pg_temp.t_ok('مدير: يشيل علامة طارئ', format('select public.inv_set_urgent(%s, false)', i_dec));
   perform pg_temp.t_eq('طارئ: انشالت', format('select urgent::text from public.invoices where id = %s', i_dec), 'false');
 
+  -- ---------------- الأفتار ----------------
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_ok('مندوب: يختار أفتار لنفسه', $q$select public.set_avatar(auth.uid(), 'm3')$q$);
+  perform pg_temp.t_eq('الأفتار: انحفظ', format('select avatar from public.profiles where id = %L', u_rep1), 'm3');
+  perform pg_temp.t_denied('مندوب: ما يغير أفتار غيره', format('select public.set_avatar(%L, %L)', u_rep2, 'm1'));
+  perform pg_temp.t_denied('أفتار باسم غريب مرفوض', $q$select public.set_avatar(auth.uid(), '<svg>')$q$);
+  perform pg_temp.t_denied('مندوب: ما يعدل profiles مباشرة', format($q$update public.profiles set avatar = 'm1' where id = %L$q$, u_rep1));
+  perform pg_temp.as_user(u_admin);
+  perform pg_temp.t_ok('أدمن: يغير أفتار غيره', format('select public.set_avatar(%L, %L)', u_rep2, 'f2'));
+  perform pg_temp.as_user(u_off);
+  perform pg_temp.t_denied('موقوف: ما يغير أفتاره', $q$select public.set_avatar(auth.uid(), 'm1')$q$);
+
+  -- ---------------- الإشعارات ----------------
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_eq('إشعار: المرحلة تغيرت مرتين (للقرار + موافقة المدير)',
+    format($q$select count(*) from public.notifications where invoice_id = %s and kind = 'stage'$q$, i_acc), '2');
+  perform pg_temp.t_eq('إشعار: فيه المرحلة الجديدة',
+    format($q$select data->>'stage' || '/' || (data->>'sub') from public.notifications where invoice_id = %s and kind = 'stage' order by id desc limit 1$q$, i_acc), 'decision/cust');
+  perform pg_temp.t_eq('إشعار: ما يوصلك عن شي سويته أنت',
+    format('select count(*) from public.notifications where invoice_id = %s', i_new1), '0');
+  perform pg_temp.t_eq('إشعار: كل واحد يشوف إشعاراته بس', format('select count(*) from public.notifications where user_id <> %L', u_rep1), '0');
+  perform pg_temp.t_denied('إشعار: ما ينضاف يدوي',
+    format($q$insert into public.notifications (user_id, invoice_id, kind) values (%L, %s, 'stage')$q$, u_rep2, i_acc));
+  perform pg_temp.t_ok('إشعار: يأشرها مقروءة', 'update public.notifications set read_at = now() where read_at is null', 2);
+  perform pg_temp.t_denied('إشعار: ما يحولها لغيره', format('update public.notifications set user_id = %L', u_rep2));
+  perform pg_temp.as_user(u_rep2);
+  perform pg_temp.t_eq('إشعار: المخزن حوّل طلب المندوب 2', format('select count(*) from public.notifications where invoice_id = %s', i_wh), '1');
+  perform pg_temp.t_eq('إشعار: ما يشوف إشعارات غيره', format('select count(*) from public.notifications where invoice_id = %s', i_acc), '0');
+  perform pg_temp.t_eq('الدوال الداخلية مقفولة', $q$select has_function_privilege('public.mentioned_users(text)', 'execute')::text$q$, 'false');
+
+  -- المنشن بالتعليق: المندوب 1 ما يشوف طلب المندوب 2، فما يوصله
+  perform pg_temp.as_user(u_acc);
+  perform pg_temp.t_ok('منشن: تعليق يذكر 3 أشخاص',
+    format($q$insert into public.invoice_comments (invoice_id, body) values (%s, '@zz rep2 شوف هذا، و@zz mgr و@zz rep1، و@zz acc')$q$, i_acc2), 1);
+  perform pg_temp.as_user(u_rep2);
+  perform pg_temp.t_eq('منشن: وصل للمندوب صاحب الطلب',
+    format($q$select count(*) from public.notifications where invoice_id = %s and kind = 'mention'$q$, i_acc2), '1');
+  perform pg_temp.as_user(u_mgr);
+  perform pg_temp.t_eq('منشن: وصل للمدير',
+    format($q$select count(*) from public.notifications where invoice_id = %s and kind = 'mention' and data->>'src' = 'comment'$q$, i_acc2), '1');
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_eq('منشن: ما يوصل للي ما يشوف الطلب',
+    format('select count(*) from public.notifications where invoice_id = %s', i_acc2), '0');
+  perform pg_temp.as_user(u_acc);
+  perform pg_temp.t_eq('منشن: ما يوصلك إذا ذكرت نفسك', $q$select count(*) from public.notifications where kind = 'mention'$q$, '0');
+
+  -- المنشن بالملاحظات: بس الأسماء الجديدة
+  perform pg_temp.t_ok('منشن: بالملاحظات', format($q$update public.invoices set notes = 'راجعها @zz mgr' where id = %s$q$, i_acc2), 1);
+  perform pg_temp.t_ok('منشن: تعديل الملاحظات بدون اسم جديد', format($q$update public.invoices set notes = 'راجعها @zz mgr اليوم' where id = %s$q$, i_acc2), 1);
+  perform pg_temp.as_user(u_mgr);
+  perform pg_temp.t_eq('منشن الملاحظات: إشعار واحد بس',
+    format($q$select count(*) from public.notifications where invoice_id = %s and data->>'src' = 'notes'$q$, i_acc2), '1');
+  perform pg_temp.as_owner();
+  perform pg_temp.t_eq('منشن: الاسم لازم يخلص (مو جزء من كلمة)', $q$select count(*) from public.mentioned_users('@zz mgrx و @zz rep')$q$, '0');
+  perform pg_temp.t_eq('منشن: الاسم الأطول يغلب', $q$select count(*) from public.mentioned_users('@zz repacc')$q$, '1');
+
+  -- ---------------- "دورك" ----------------
+  perform pg_temp.as_user(u_acc);
+  perform pg_temp.t_eq('دورك: المحاسب يوصله الطلب المرسل للحسابات',
+    format($q$select count(*) from public.notifications where invoice_id = %s and kind = 'turn'$q$, i_new1), '1');
+  perform pg_temp.as_user(u_repacc);
+  perform pg_temp.t_eq('دورك: كل المحاسبين (حتى صاحب الدورين)',
+    format($q$select count(*) from public.notifications where invoice_id = %s and kind = 'turn'$q$, i_new1), '1');
+  perform pg_temp.as_user(u_mgr);
+  perform pg_temp.t_eq('دورك: المدير يوصله اللي ينتظر موافقته',
+    format($q$select count(*) from public.notifications where invoice_id = %s and kind = 'turn'$q$, i_acc), '1');
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_eq('دورك: صاحب الطلب ما يوصله إشعار مكرر (يكفي إشعار المرحلة)',
+    format($q$select count(*) from public.notifications where invoice_id = %s and kind = 'turn'$q$, i_acc), '0');
+  perform pg_temp.as_user(u_wh);
+  perform pg_temp.t_eq('دورك: المخزن ما يوصله شي ما دوره', 'select count(*) from public.notifications', '0');
+
+  -- ---------------- تعليق على طلبك ----------------
+  perform pg_temp.as_user(u_acc);
+  perform pg_temp.t_ok('تعليق بدون منشن', format($q$insert into public.invoice_comments (invoice_id, body) values (%s, 'ناقص رقم الحجز')$q$, i_acc2), 1);
+  perform pg_temp.as_user(u_rep2);
+  perform pg_temp.t_eq('تعليق: وصل لصاحب الطلب',
+    format($q$select count(*) from public.notifications where invoice_id = %s and kind = 'comment'$q$, i_acc2), '1');
+  perform pg_temp.t_eq('تعليق: اللي انذكر ما يوصله إشعار ثاني عن نفس التعليق',
+    format($q$select count(*) from public.notifications where invoice_id = %s and kind in ('comment', 'mention')$q$, i_acc2), '2');
+
+  -- ---------------- التذكير اليومي ----------------
+  perform pg_temp.as_owner();
+  update public.invoices set stage_at = now() - interval '4 days' where id = i_acc2;
+  perform public.notify_late();
+  perform public.notify_late();
+  perform pg_temp.as_user(u_acc);
+  perform pg_temp.t_eq('متأخر: المحاسب يوصله تذكير مرة وحدة باليوم',
+    format($q$select count(*) || '/' || max(data->>'days') from public.notifications where invoice_id = %s and kind = 'late'$q$, i_acc2), '1/4');
+  perform pg_temp.as_user(u_rep2);
+  perform pg_temp.t_eq('متأخر: المندوب ما يوصله (مو دوره)',
+    format($q$select count(*) from public.notifications where invoice_id = %s and kind = 'late'$q$, i_acc2), '0');
+  perform pg_temp.t_denied('متأخر: المستخدم ما يشغّل التذكير', 'select public.notify_late()');
+
+  -- ---------------- Web Push ----------------
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_ok('push: يسجل جهازه', $q$select public.push_subscribe('https://push.test/abc', 'k', 'a', 'ua')$q$);
+  perform pg_temp.t_denied('push: رابط مو https مرفوض', $q$select public.push_subscribe('http://evil/x', 'k', 'a')$q$);
+  perform pg_temp.t_denied('push: ما يقرا الاشتراكات', 'select * from public.push_subscriptions');
+  perform pg_temp.t_denied('push: ما يقرا الإعدادات', 'select * from app_private.push_config');
+  perform pg_temp.as_user(u_rep2);
+  perform pg_temp.t_ok('push: نفس الجهاز ينتقل لمستخدم ثاني', $q$select public.push_subscribe('https://push.test/abc', 'k2', 'a2')$q$);
+  perform pg_temp.as_owner();
+  perform pg_temp.t_eq('push: الاشتراك صار للمستخدم الجديد',
+    $q$select user_id::text from public.push_subscriptions where endpoint = 'https://push.test/abc'$q$, u_rep2::text);
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_ok('push: إلغاء اشتراك مو إله ما يأثر', $q$select public.push_unsubscribe('https://push.test/abc')$q$);
+  perform pg_temp.as_owner();
+  perform pg_temp.t_eq('push: الاشتراك باقي', $q$select count(*) from public.push_subscriptions$q$, '1');
+  -- بدون pg_net: الإشعار ينحفظ عادي حتى لو الإعداد موجود
+  insert into app_private.push_config (url, secret) values ('https://x.test/functions/v1/push', 's') on conflict (id) do nothing;
+  perform pg_temp.as_user(u_acc);
+  perform pg_temp.t_ok('push: فشل الإرسال ما يوقف التعليق',
+    format($q$insert into public.invoice_comments (invoice_id, body) values (%s, 'تجربة')$q$, i_acc2), 1);
+
   -- ---------------- النتيجة ----------------
   perform pg_temp.as_owner();
   msg := current_setting('tst.fail', true);
