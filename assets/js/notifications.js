@@ -11,6 +11,10 @@ let LIST = [], chan = null, open = false;
 const BASE_TITLE = document.title;
 const unread = () => LIST.filter(n => !n.read_at).length;
 
+// رجوع لمرحلة سابقة (إرجاع من المدير/المحاسب أو نقل للخلف)
+const ORD = { new: 1, acc: 2, decision: 3 };
+const back = d => ORD[d.stage] < ORD[d.from_stage];
+
 // نص الإشعار (بدون HTML)
 function text(n) {
   const d = n.data || {}, who = n.actor ? userName(n.actor) : 'النظام';
@@ -18,7 +22,7 @@ function text(n) {
   if (n.kind === 'mention') return `${who} ذكرك ${d.src === 'notes' ? 'بالملاحظات' : 'بتعليق'} على الطلب ${inv}`;
   if (n.kind === 'comment') return `${who} علّق على طلبك ${inv}`;
   if (n.kind === 'late') return `الطلب ${inv} صار له ${d.days} يوم بنفس المرحلة وينتظرك`;
-  if (d.stage === 'acc' && d.from_stage === 'decision') return `${who} رجّع الطلب ${inv} للحسابات`;
+  if (back(d)) return d.stage === 'new' ? `${who} رجّع الطلب ${inv} إلك للتعديل` : `${who} رجّع الطلب ${inv} للحسابات`;
   if (n.kind === 'turn') return `${who} حوّل لك الطلب ${inv} — ${TURN[d.stage === 'decision' ? d.sub : d.stage] || ''}`;
   if (d.stage === 'done') return `${who} حوّل الطلب ${inv} لمبيعات ✓`;
   if (d.stage === 'cancel') return `${who} ألغى الطلب ${inv}${d.reason ? ': ' + d.reason : ''}`;
@@ -43,10 +47,10 @@ function kindIcon(n) {
   if (n.kind === 'mention') return ['at', 'var(--primary)'];
   if (n.kind === 'comment') return ['chat', 'var(--primary)'];
   if (n.kind === 'late') return ['clock', 'var(--urgent)'];
-  if (n.kind === 'turn' && !(d.stage === 'acc' && d.from_stage === 'decision')) return ['inbox', 'var(--ok)'];
+  if (n.kind === 'turn' && !back(d)) return ['inbox', 'var(--ok)'];
   if (d.stage === 'done') return ['check', 'var(--ok)'];
   if (d.stage === 'cancel') return ['x', 'var(--bad)'];
-  if (d.stage === 'acc' && d.from_stage === 'decision') return ['back', 'var(--warn)'];
+  if (back(d)) return ['back', 'var(--warn)'];
   return ['board', 'var(--vio)'];
 }
 

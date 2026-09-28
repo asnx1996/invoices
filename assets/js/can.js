@@ -14,6 +14,8 @@ export function can(a, inv) {
     case 'editTerms': return admin || (inv.stage === 'acc' && acc);
     case 'sendToDecision': return inv.stage === 'acc' && (admin || acc);
     case 'setCost': return admin || (inv.stage === 'acc' && acc);
+    case 'returnToRep': return inv.stage === 'acc' && (admin || acc);
+    case 'move': return admin || mgr;
     case 'approve': case 'returnToAcc': return inv.stage === 'decision' && inv.sub === 'mgr' && (admin || mgr);
     case 'custAccept': case 'custRefuse': return inv.stage === 'decision' && inv.sub === 'cust' && (admin || mgr || (rep && own));
     case 'complete': return inv.stage === 'decision' && inv.sub === 'wh' && (admin || mgr || wh);

@@ -419,6 +419,49 @@ begin
   perform pg_temp.t_ok('push: فشل الإرسال ما يوقف التعليق',
     format($q$insert into public.invoice_comments (invoice_id, body) values (%s, 'تجربة')$q$, i_acc2), 1);
 
+  -- ---------------- 009: نقل الطلب + إرجاع للمندوب ----------------
+  perform pg_temp.as_owner();
+  insert into public.invoices (rep_id, customer_id, quote_no, value, pdf_path, stage, cancel_reason, closed_at)
+    values (u_rep1, c1, 'Q9', 100, 'p', 'cancel', 'رفض', now()) returning id into i_new3;
+  insert into public.invoices (rep_id, customer_id, quote_no, value, pdf_path, stage)
+    values (u_rep1, c1, 'Q10', 100, 'p', 'acc') returning id into i_new2;
+
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_denied('نقل: المندوب ما ينقل', format($q$select public.inv_move(%s, 'new', 'x')$q$, i_new3));
+  perform pg_temp.as_user(u_acc);
+  perform pg_temp.t_denied('نقل: المحاسب ما ينقل', format($q$select public.inv_move(%s, 'acc', 'x')$q$, i_new3));
+  perform pg_temp.as_user(u_mgr);
+  perform pg_temp.t_denied('نقل: بدون سبب مرفوض', format($q$select public.inv_move(%s, 'new', ' ')$q$, i_new3));
+  perform pg_temp.t_denied('نقل: "تمت" مو هدف', format($q$select public.inv_move(%s, 'done', 'x')$q$, i_new3));
+  perform pg_temp.t_ok('نقل: المدير يرجع الملغاة للحسابات', format($q$select public.inv_move(%s, 'acc', 'غلط')$q$, i_new3));
+  perform pg_temp.t_eq('نقل: المرحلة + مسح الإلغاء',
+    format($q$select stage || '/' || coalesce(cancel_reason, '-') || '/' || coalesce(closed_at::text, '-') from public.invoices where id = %s$q$, i_new3), 'acc/-/-');
+  perform pg_temp.as_user(u_admin);
+  perform pg_temp.t_ok('نقل: الأدمن ينقل لموافقة المدير', format($q$select public.inv_move(%s, 'decision:mgr', 'x')$q$, i_new3));
+  perform pg_temp.t_ok('نقل: الأدمن يرجعه للطلب الجديد', format($q$select public.inv_move(%s, 'new', 'نعيد')$q$, i_new3));
+  perform pg_temp.t_eq('نقل: رجع للجديد وانحسب إرجاع',
+    format($q$select stage || '/' || coalesce(sub::text, '-') || '/' || returned from public.invoices where id = %s$q$, i_new3), 'new/-/1');
+  perform pg_temp.t_eq('نقل: السبب انكتب تعليق',
+    format($q$select count(*) from public.invoice_comments where invoice_id = %s and is_system and body like 'نقل من%%'$q$, i_new3), '3');
+  perform pg_temp.t_ok('نقل: الأدمن يلغي مع السبب', format($q$select public.inv_move(%s, 'cancel', 'ما يريد')$q$, i_new3));
+  perform pg_temp.t_eq('نقل: سبب الإلغاء', format($q$select cancel_reason from public.invoices where id = %s$q$, i_new3), 'ما يريد');
+
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_denied('إرجاع للمندوب: المندوب ما يرجع', format($q$select public.inv_return_to_rep(%s, 'x')$q$, i_new2));
+  perform pg_temp.as_user(u_mgr);
+  perform pg_temp.t_denied('إرجاع للمندوب: المدير ما يرجع (عنده النقل)', format($q$select public.inv_return_to_rep(%s, 'x')$q$, i_new2));
+  perform pg_temp.as_user(u_acc);
+  perform pg_temp.t_denied('إرجاع للمندوب: بدون تعديلات مرفوض', format($q$select public.inv_return_to_rep(%s, '')$q$, i_new2));
+  perform pg_temp.t_ok('إرجاع للمندوب: المحاسب يرجع', format($q$select public.inv_return_to_rep(%s, 'غيّر القيمة')$q$, i_new2));
+  perform pg_temp.t_eq('إرجاع للمندوب: رجع للجديد',
+    format($q$select stage || '/' || returned from public.invoices where id = %s$q$, i_new2), 'new/1');
+  perform pg_temp.t_denied('إرجاع للمندوب: مو بالحسابات مرفوض', format($q$select public.inv_return_to_rep(%s, 'x')$q$, i_new2));
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_eq('إرجاع للمندوب: المندوب وصله إشعار دوره',
+    format($q$select count(*) from public.notifications where invoice_id = %s and data->>'stage' = 'new' and data->>'from_stage' = 'acc'$q$, i_new2), '1');
+  perform pg_temp.t_ok('إرجاع للمندوب: المندوب يعدل ويرسل',
+    format($q$update public.invoices set value = 200 where id = %s$q$, i_new2), 1);
+
   -- ---------------- النتيجة ----------------
   perform pg_temp.as_owner();
   msg := current_setting('tst.fail', true);

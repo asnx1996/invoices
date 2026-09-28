@@ -2,7 +2,7 @@ import { S, getInv, userName } from './state.js';
 import { sb, rpc, refreshInvoice, loadInvoices } from './api.js';
 import { can } from './can.js';
 import { ask, toast, num } from './util.js';
-import { openDrawer, closeDrawer } from './drawer.js';
+import { openDrawer, closeDrawer, reloadActivity } from './drawer.js';
 
 export function waitingOn(inv) {
   if (inv.stage === 'new') return 'المندوب (' + userName(inv.rep_id) + ') يكمل البيانات ويرسل للحسابات';
@@ -41,7 +41,7 @@ async function step(fn, args, okMsg, id) {
   if (box) { box.classList.add('busy'); box.setAttribute('aria-busy', 'true') }
   try {
     const r = await rpc(fn, args, okMsg);
-    if (r.ok) { S.lastMissing = null; await refreshInvoice(id) }
+    if (r.ok) { S.lastMissing = null; await refreshInvoice(id); reloadActivity(id) }
     return r;
   } finally {
     inFlight = false;
@@ -57,6 +57,9 @@ async function deleteInvoice(inv) {
   closeDrawer(); await loadInvoices(); toast('انحذف الطلب #' + inv.id);
 }
 
+// أهداف "نقل الطلب" (الأدمن والمدير) — "تمت" مو منها: تحتاج رقم مبيعات من المخزن
+const MOVE_TO = { new: 'طلب جديد', acc: 'الحسابات', 'decision:mgr': 'بانتظار موافقة المدير', 'decision:cust': 'بانتظار رد الزبون', 'decision:wh': 'بانتظار تحويل المخزن', cancel: 'ملغاة' };
+
 export const ACTIONS = {
   sendToAcc(inv) {
     const m = missingBasic(inv);
@@ -71,6 +74,15 @@ export const ACTIONS = {
   approve: inv => step('inv_approve', { p_id: inv.id }, 'تمت الموافقة، بانتظار رد الزبون', inv.id),
   returnToAcc: inv => ask('إرجاع الطلب للحسابات', [{ id: 'r', label: 'سبب الإرجاع', type: 'textarea', req: true }],
     v => step('inv_return_to_acc', { p_id: inv.id, p_reason: v.r }, 'رجع الطلب للمحاسب', inv.id)),
+  returnToRep: inv => ask('إرجاع الطلب للمندوب', [{ id: 'r', label: 'التعديلات المطلوبة', type: 'textarea', req: true, help: 'المندوب يشوفها كتعليق على الطلب ويوصله إشعار' }],
+    v => step('inv_return_to_rep', { p_id: inv.id, p_reason: v.r }, 'رجع الطلب للمندوب', inv.id)),
+  move: inv => {
+    const cur = inv.stage + (inv.sub ? ':' + inv.sub : '');
+    const opts = Object.entries(MOVE_TO).filter(([k]) => k !== cur).map(([k, t]) => `<option value="${k}">${t}</option>`).join('');
+    ask('نقل الطلب #' + inv.id, [{ id: 't', label: 'إلى المرحلة', type: 'select', opts, req: true },
+      { id: 'r', label: 'السبب', type: 'textarea', req: true, help: 'ينكتب كتعليق على الطلب' }],
+      v => step('inv_move', { p_id: inv.id, p_target: v.t, p_reason: v.r }, 'انتقل الطلب إلى: ' + MOVE_TO[v.t], inv.id), { okText: 'نقل' });
+  },
   custAccept: inv => step('inv_customer_accept', { p_id: inv.id }, 'الزبون موافق، بانتظار المخزن', inv.id),
   custRefuse: inv => ask('الزبون رفض', [{ id: 'r', label: 'سبب الرفض', type: 'textarea', req: true }],
     v => step('inv_customer_refuse', { p_id: inv.id, p_reason: v.r }, 'انتقل الطلب للملغاة', inv.id)),

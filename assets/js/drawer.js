@@ -39,6 +39,18 @@ export async function openDrawer(id, push = true) {
   if (S.drawerId === id) renderDrawer();
 }
 
+// بعد أي إجراء: التعليقات والسجل ممكن تغيّرت (سبب الإرجاع/النقل ينكتب تعليق)
+export async function reloadActivity(id) {
+  if (S.drawerId !== id) return;
+  const [c, l] = await Promise.all([
+    sb.from('invoice_comments').select('*').eq('invoice_id', id).order('at'),
+    sb.from('invoice_log').select('*').eq('invoice_id', id).order('at'),
+  ]);
+  if (S.drawerId !== id) return;
+  extra.comments = c.data || []; extra.log = l.data || [];
+  renderDrawer();
+}
+
 // الإغلاق يمر من التاريخ (history) حتى يبقى متطابق مع زر الرجوع؛ popstate يستدعي hideDrawer
 export function closeDrawer(force) {
   const dr = S.drawerId === 'draft' && S.draft;
@@ -121,10 +133,11 @@ function actionsHTML(inv) {
     <div class="row"><button class="btn primary" id="saveDraft">${ic('check')}حفظ الطلب</button></div></div>`;
   const btn = (a, label, cls = '', icn = '') => can(a, inv) ? `<button class="btn ${cls}" data-act="${a}">${icn ? ic(icn) : ''}${label}</button>` : '';
   const btns = [btn('sendToAcc', 'إرسال للحسابات', 'primary', 'check'), btn('sendToDecision', 'إرسال للقرار', 'primary', 'check'),
+    btn('returnToRep', 'إرجاع للمندوب', 'bad', 'back'),
     btn('approve', 'موافقة على الشروط', 'ok', 'check'), btn('returnToAcc', 'إرجاع للحسابات', 'bad', 'back'),
     btn('custAccept', 'الزبون موافق', 'ok', 'check'), btn('custRefuse', 'الزبون رفض', 'bad', 'x'),
     btn('complete', 'تحويل لمبيعات + رقم المبيعات', 'ok', 'check')].join('');
-  const small = [can('toggleUrgent', inv) ? `<button class="btn sm ${inv.urgent ? '' : 'bad'}" data-act="toggleUrgent" aria-pressed="${!!inv.urgent}">${ic('flame')}${inv.urgent ? 'شيل علامة طارئ' : 'طارئ'}</button>` : '', btn('requestDelete', 'طلب حذف', 'bad sm', 'trash'), inv.delete_req_at ? '' : btn('delete', 'حذف', 'bad sm', 'trash')].join('');
+  const small = [btn('move', 'نقل لمرحلة ثانية', 'sm', 'board'), can('toggleUrgent', inv) ? `<button class="btn sm ${inv.urgent ? '' : 'bad'}" data-act="toggleUrgent" aria-pressed="${!!inv.urgent}">${ic('flame')}${inv.urgent ? 'شيل علامة طارئ' : 'طارئ'}</button>` : '', btn('requestDelete', 'طلب حذف', 'bad sm', 'trash'), inv.delete_req_at ? '' : btn('delete', 'حذف', 'bad sm', 'trash')].join('');
   let wait;
   if (inv.stage === 'done') wait = `تمت برقم مبيعات <b>${esc(inv.sales_no)}</b> — ${dOnly(inv.closed_at)}`;
   else if (inv.stage === 'cancel') wait = `ملغاة: ${esc(inv.cancel_reason)}`;
