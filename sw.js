@@ -1,12 +1,13 @@
 // Service worker: يخلي الموقع ينثبت كتطبيق ويفتح أسرع.
 // "الشبكة أولاً": دائماً ياخذ آخر نسخة، والمخزّن بس إذا ماكو إنترنت.
 // البيانات (Supabase) ما تنخزن هنا أبداً.
-const CACHE = 'invoices-v3';
+const CACHE = 'invoices-v4';
 const SHELL = [
   './', 'index.html', 'assets/app.css', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png',
   'assets/js/main.js', 'assets/js/config.js', 'assets/js/util.js', 'assets/js/state.js', 'assets/js/api.js',
   'assets/js/can.js', 'assets/js/actions.js', 'assets/js/auth.js', 'assets/js/board.js', 'assets/js/drawer.js',
   'assets/js/users.js', 'assets/js/customers.js', 'assets/js/reports.js', 'assets/js/export.js', 'assets/js/backup.js',
+  'assets/js/appearance.js', 'assets/backgrounds/ledger.jpg', 'assets/backgrounds/midnight.jpg',
   'assets/js/avatars.js', 'assets/js/notifications.js', 'assets/js/mentions.js',
 ];
 

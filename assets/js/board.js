@@ -197,7 +197,6 @@ export function initBoard() {
     e.preventDefault(); handleDrop(dragId, col.dataset.col);
   });
 
-  initBackground();
 }
 
 // فتح/إغلاق كرت بدون إعادة رسم اللوحة (حتى تشتغل الحركة)
@@ -218,52 +217,4 @@ function handleDrop(id, to) {
   else if (f === 'decision' && to === 'cancel' && inv.sub === 'cust') a = 'custRefuse';
   if (!a) return toast('هذا الانتقال غير مسموح. ' + (waitingOn(inv) ? 'الخطوة الحالية: ' + waitingOn(inv) : ''));
   run(a, id);
-}
-
-// ---------- صورة الخلفية (لكل جهاز، تنحفظ بالمتصفح) ----------
-function applyBg(url) {
-  document.body.classList.toggle('has-bg', !!url);
-  if (url) document.body.style.setProperty('--bg-img', `url("${url}")`);
-  else document.body.style.removeProperty('--bg-img');
-}
-
-// نصغّر الصورة (أقصى 1920px، JPEG) حتى تنحفظ بالمتصفح وما تثقل الصفحة
-function shrink(file) {
-  return new Promise((ok, bad) => {
-    const img = new Image(), src = URL.createObjectURL(file);
-    img.onload = () => {
-      const k = Math.min(1, 1920 / Math.max(img.width, img.height));
-      const c = document.createElement('canvas');
-      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      URL.revokeObjectURL(src); ok(c.toDataURL('image/jpeg', 0.82));
-    };
-    img.onerror = () => { URL.revokeObjectURL(src); bad(new Error('ما انقرت الصورة')) };
-    img.src = src;
-  });
-}
-
-function initBackground() {
-  try { applyBg(localStorage.getItem('ib_bg')) } catch (e) { }
-  $('#bgBtn').onclick = () => {
-    if (!document.body.classList.contains('has-bg')) return $('#bgIn').click();
-    ask('صورة الخلفية', [{
-      id: 'a', label: 'شتريد تسوي؟', type: 'select',
-      opts: '<option value="change">تغيير الصورة</option><option value="remove">إزالة الخلفية</option>',
-    }], v => {
-      if (v.a === 'change') return $('#bgIn').click();
-      try { localStorage.removeItem('ib_bg') } catch (e) { }
-      applyBg(null); toast('انشالت الخلفية');
-    });
-  };
-  $('#bgIn').onchange = async e => {
-    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
-    if (!f.type.startsWith('image/')) return toast('اختار صورة');
-    try {
-      const url = await shrink(f);
-      applyBg(url);
-      try { localStorage.setItem('ib_bg', url) } catch (err) { toast('الصورة كبيرة، راح تنشال لما تسكر الصفحة'); return }
-      toast('انحفظت الخلفية على هذا الجهاز');
-    } catch (err) { toast(err.message) }
-  };
 }

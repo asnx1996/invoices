@@ -35,7 +35,7 @@ ${body}
 ${js(u('./mock.js'))}
 </script>
 <script>
-${js(bundle)}
+${js(bundle).replace(/assets\/backgrounds\/(ledger|midnight)\.jpg/g, (_, name) => 'data:image/jpeg;base64,' + readFileSync(u('../assets/backgrounds/' + name + '.jpg')).toString('base64'))}
 </script>
 </body>
 </html>

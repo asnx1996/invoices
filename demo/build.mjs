@@ -25,3 +25,6 @@ copyFileSync(u('./config.js'), u('./dist/assets/js/config.js'));
 copyFileSync(u('./mock.js'), u('./dist/mock.js'));
 copyFileSync(u('./demo.css'), u('./dist/demo.css'));
 console.log('demo/dist ready:', out.length, 'bytes index');
+
+mkdirSync(u('./dist/assets/backgrounds/'), { recursive: true });
+for (const f of readdirSync(u('../assets/backgrounds/'))) copyFileSync(u('../assets/backgrounds/' + f), u('./dist/assets/backgrounds/' + f));
