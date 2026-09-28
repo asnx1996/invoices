@@ -462,6 +462,18 @@ begin
   perform pg_temp.t_ok('إرجاع للمندوب: المندوب يعدل ويرسل',
     format($q$update public.invoices set value = 200 where id = %s$q$, i_new2), 1);
 
+  -- ---------------- 010: المحاسب يعدل القيمة ----------------
+  perform pg_temp.as_owner();
+  insert into public.invoices (rep_id, customer_id, quote_no, value, pdf_path, stage)
+    values (u_rep1, c1, 'Q11', 100, 'p', 'acc') returning id into i_new3;
+  perform pg_temp.as_user(u_acc);
+  perform pg_temp.t_ok('قيمة: المحاسب يعدلها بالحسابات', format('update public.invoices set value = 555 where id = %s', i_new3), 1);
+  perform pg_temp.t_eq('قيمة: انحفظت', format('select value::int::text from public.invoices where id = %s', i_new3), '555');
+  perform pg_temp.t_denied('قيمة: المحاسب ما يعدل رقم العرض', format($q$update public.invoices set quote_no = 'X' where id = %s$q$, i_new3));
+  perform pg_temp.t_denied('قيمة: المحاسب ما يعدلها بالطلب الجديد', format('update public.invoices set value = 1 where id = %s', i_new2));
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_denied('قيمة: المندوب ما يعدلها بالحسابات', format('update public.invoices set value = 1 where id = %s', i_new3));
+
   -- ---------------- النتيجة ----------------
   perform pg_temp.as_owner();
   msg := current_setting('tst.fail', true);
