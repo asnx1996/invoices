@@ -8,13 +8,16 @@ import { run, waitingOn, missingBasic, missingTerms } from './actions.js';
 import { avatarHTML } from './avatars.js';
 import { highlightMentions, MENTION_HELP } from './mentions.js';
 
-let extra = { comments: [], log: [], pdfUrl: null, costEdit: false };
+// pending: تعديلات مكتوبة بالدرج وما انحفظت بعد (تنحفظ بزر "حفظ التعديلات")
+let extra = { comments: [], log: [], pdfUrl: null, costEdit: false, pending: {}, pendingCost: null };
 let returnFocus = null;
 const shown = { steps: false, log: false }; // الأقسام المطوية تبقى مثل ما تركها المستخدم
 
 export async function openDrawer(id, push = true) {
   const wasOpen = !!S.drawerId;
-  S.drawerId = id; extra = { comments: [], log: [], pdfUrl: null, costEdit: false };
+  if (S.drawerId !== id) extra = { comments: [], log: [], pdfUrl: null, costEdit: false, pending: {}, pendingCost: null };
+  else Object.assign(extra, { comments: [], log: [], pdfUrl: null });
+  S.drawerId = id;
   renderDrawer();
   if (S.drawerId !== id) return; // الطلب مو موجود
   // الطلب إله رابط يتشارك، وزر الرجوع بالموبايل يسكّر الدرج بدل ما يطلع من الموقع
@@ -51,11 +54,25 @@ export async function reloadActivity(id) {
   renderDrawer();
 }
 
+const dirty = () => Object.keys(extra.pending).length > 0 || extra.pendingCost != null;
+const clearPending = () => { extra.pending = {}; extra.pendingCost = null; extra.costEdit = false };
+const same = (a, b) => String(a ?? '') === String(b ?? '');
+
+// زر الحفظ يتحدث بدون إعادة رسم الدرج (حتى ما يضيع المؤشر من الحقل)
+function paintSaveBar() {
+  const bar = $('#saveBar'); if (!bar) return;
+  const n = Object.keys(extra.pending).length + (extra.pendingCost != null ? 1 : 0);
+  bar.style.display = n ? 'flex' : 'none'; // inline حتى ما يتعارض ويا display بالستايل
+  $('#saveN').textContent = n === 1 ? 'تعديل واحد ما انحفظ' : `${n} تعديلات ما انحفظت`;
+}
+
 // الإغلاق يمر من التاريخ (history) حتى يبقى متطابق مع زر الرجوع؛ popstate يستدعي hideDrawer
 export function closeDrawer(force) {
   const dr = S.drawerId === 'draft' && S.draft;
   if (force !== true && dr && (dr.customer_id || dr.value || dr.quote_no || dr.res_no || S.draftFile))
     return ask('تجاهل الطلب الجديد؟', [], () => closeDrawer(true), { okText: 'تجاهل', danger: true, msg: 'الطلب ما انحفظ، وإذا طلعت تروح البيانات اللي كتبتها.' });
+  if (force !== true && S.drawerId !== 'draft' && dirty())
+    return ask('تجاهل التعديلات؟', [], () => { clearPending(); closeDrawer(true) }, { okText: 'تجاهل', danger: true, msg: 'عندك تعديلات ما انحفظت، وإذا طلعت تروح.' });
   if (S.drawerId && history.state && history.state.drawer) { history.back(); return }
   hideDrawer();
 }
@@ -158,10 +175,10 @@ function customerFld(inv, dis) {
 
 function costFld(inv) {
   if (!can('setCost', inv)) return '';
-  if (hasRole('admin')) return fld(`سعر الكلفة (${cur()}) — للأدمن فقط`, 'cost', S.COSTS[inv.id] ?? '', { type: 'number', req: true, help: 'ما يظهر لأي أحد غيرك' }).replace('data-f="cost"', 'data-cost="1"');
+  if (hasRole('admin')) return fld(`سعر الكلفة (${cur()}) — للأدمن فقط`, 'cost', extra.pendingCost ?? S.COSTS[inv.id] ?? '', { type: 'number', req: true, help: 'ما يظهر لأي أحد غيرك' }).replace('data-f="cost"', 'data-cost="1"');
   if (inv.cost_set && !extra.costEdit)
     return `<div class="fld"><label>سعر الكلفة</label><div class="cost-set">${ic('check')}مسجّل (مخفي) <button class="btn sm" data-costedit="1">تغيير</button></div></div>`;
-  return fld(`سعر الكلفة (${cur()})`, 'cost', '', { type: 'number', req: true, help: 'بعد الحفظ يختفي ومحد يشوفه غير الأدمن' }).replace('data-f="cost"', 'data-cost="1"');
+  return fld(`سعر الكلفة (${cur()})`, 'cost', extra.pendingCost ?? '', { type: 'number', req: true, help: 'بعد الحفظ يختفي ومحد يشوفه غير الأدمن' }).replace('data-f="cost"', 'data-cost="1"');
 }
 
 function termsHTML(inv) {
@@ -202,7 +219,8 @@ function profitHTML(inv) {
 }
 
 export function renderDrawer() {
-  const inv = getInv(S.drawerId); if (!inv) return closeDrawer();
+  const real = getInv(S.drawerId); if (!real) return closeDrawer(true);
+  const inv = dirty() ? { ...real, ...extra.pending } : real; // الحقول تنعرض بالتعديلات اللي ما انحفظت
   const eb = !can('editBasic', inv), draft = inv.id === 'draft';
   const col = COLS.find(c => c.k === inv.stage);
   // نحافظ على مكان التمرير والحقل المحدد بعد إعادة الرسم
@@ -224,12 +242,12 @@ export function renderDrawer() {
     ${actionsHTML(inv)}
     ${draft ? '' : `<details class="more" data-more="steps" ${shown.steps ? 'open' : ''}><summary>مراحل الطلب</summary>${stepsHTML(inv)}</details>`}
     ${draft ? '' : profitHTML(inv)}
-    <section class="blk"><h4>بيانات الطلب ${eb ? `<span class="lock">${ic('lock')}للعرض فقط</span>` : ''}</h4>
+    <section class="blk"><h4>بيانات الطلب ${eb && !can('editValue', inv) ? `<span class="lock">${ic('lock')}للعرض فقط</span>` : ''}</h4>
       <div class="grid">
         ${customerFld(inv, eb)}
         ${fld('رقم عرض السعر', 'quote_no', inv.quote_no, { dis: qDis })}
         ${fld('رقم الحجز', 'res_no', inv.res_no, { dis: rDis, help: 'واحد منهم فقط' })}
-        ${fld(`قيمة الفاتورة (${cur()})`, 'value', inv.value, { type: 'number', req: true, dis: eb, rer: true })}
+        ${fld(`قيمة الفاتورة (${cur()})`, 'value', inv.value, { type: 'number', req: true, dis: !can('editValue', inv), rer: true, help: eb && can('editValue', inv) ? 'يعدلها المحاسب بمرحلة الحسابات' : '' })}
         ${hasRole('admin') && inv.stage === 'new' ? fld('المندوب', 'rep_id', inv.rep_id, { opts: Object.fromEntries(reps().map(r => [r.id, r.full_name])), rer: true }) : `<div class="fld"><label>المندوب</label><input type="text" value="${esc(userName(inv.rep_id))}" disabled></div>`}
         <div class="fld full"><label>ملف الفاتورة PDF <span class="req">*</span></label>
           <div class="pdf">${ic('file')}<span class="name" title="${esc(inv.pdf_name || '')}">${inv.pdf_path || inv.pdf_name ? esc(inv.pdf_name || 'ملف') + ' · ' + Math.round((inv.pdf_size || 0) / 1024) + ' KB' : '<span style="color:var(--faint)">ما مرفوع ملف</span>'}</span>
@@ -243,7 +261,11 @@ export function renderDrawer() {
       <div class="add-c">${avatarHTML(S.ME, 30, 'c-av')}<input type="text" id="cIn" data-mention="1" autocomplete="off" placeholder="اكتب تعليق... (@ حتى تذكر شخص)" aria-label="تعليق"><button class="btn primary" id="cBtn">إرسال</button></div></section>
     <details class="more blk" data-more="log" ${shown.log ? 'open' : ''}><summary>سجل الحركة${extra.log.length ? ` (${extra.log.length})` : ''}</summary>
       <ul class="timeline">${extra.log.slice().reverse().map(l => `<li><div>${esc(userName(l.actor))}: ${esc(l.body)}</div><div class="t">${dt(l.at)}</div></li>`).join('') || '<li class="help">—</li>'}</ul></details>`}
+    ${draft ? '' : `<div id="saveBar" role="status" style="position:sticky;bottom:0;z-index:2;display:none;align-items:center;gap:8px;flex-wrap:wrap;margin:12px -4px 0;padding:10px 12px;background:var(--surface);border:1px solid var(--warn);border-radius:12px;box-shadow:0 -6px 18px rgb(0 0 0 / .18)">
+      <span id="saveN" style="flex:1;min-width:0;color:var(--warn);font-weight:600"></span>
+      <button class="btn sm" id="undoEdits">تراجع</button><button class="btn primary sm" id="saveEdits">${ic('check')}حفظ التعديلات</button></div>`}
   </div>`;
+  paintSaveBar();
   $('#drawer .d-body').scrollTop = scroll;
   if (focusId) { const f = document.getElementById(focusId); if (f && !f.disabled) f.focus({ preventScroll: true }) }
 }
@@ -270,6 +292,35 @@ async function save(inv, patch, rerender) {
   else renderBoard();
   if (rerender) renderDrawer();
   return true;
+}
+
+// تعديل على طلب محفوظ: ينحط بالانتظار لحد ما ينضغط "حفظ التعديلات"
+function stage(inv, patch, rerender) {
+  if (inv.id === 'draft') return save(inv, patch, rerender);
+  for (const [k, v] of Object.entries(patch)) {
+    if (same(v, inv[k])) delete extra.pending[k]; else extra.pending[k] = v;
+  }
+  if (rerender) renderDrawer(); else paintSaveBar();
+}
+
+async function saveEdits() {
+  // الحقل اللي بيه المؤشر نثبّته أول، حتى ما تضيع آخر كتابة
+  const a = document.activeElement; if (a && $('#drawer').contains(a)) a.blur();
+  const inv = getInv(S.drawerId); if (!inv || !dirty()) return;
+  const btn = $('#saveEdits'); if (btn.classList.contains('busy')) return;
+  btn.classList.add('busy'); btn.setAttribute('aria-busy', 'true');
+  const patch = { ...extra.pending }, cost = extra.pendingCost;
+  if (Object.keys(patch).length) {
+    if (!await save(inv, patch, false)) { const b = $('#saveEdits'); if (b) { b.classList.remove('busy'); b.removeAttribute('aria-busy') } return }
+    extra.pending = {};
+  }
+  if (cost != null) {
+    const r = await rpc('inv_set_cost', { p_id: inv.id, p_cost: cost });
+    if (!r.ok) { renderDrawer(); return }
+    extra.pendingCost = null; extra.costEdit = false;
+    await reloadLog(); await refreshInvoice(inv.id);
+  }
+  renderDrawer(); toast('انحفظت التعديلات');
 }
 
 async function uploadPdf(inv, f) {
@@ -343,10 +394,13 @@ export function initDrawer() {
   const d = $('#drawer');
   // زر "حفظ الطلب": لو الضغطة تشيل التركيز من الحقل، الـ change يعيد رسم الدرج
   // والزر ينمسح بين ما ينضغط وما ينترك، فالضغطة تضيع. نمنع خسارة التركيز ونثبّت الحقل بـ saveDraft
-  d.addEventListener('mousedown', e => { if (e.target.closest('#saveDraft')) e.preventDefault() });
+  d.addEventListener('mousedown', e => { if (e.target.closest('#saveDraft,#saveEdits')) e.preventDefault() });
   d.addEventListener('click', e => {
     if (e.target.closest('.close')) return closeDrawer();
-    const a = e.target.closest('[data-act]'); if (a) return run(a.dataset.act, S.drawerId);
+    const a = e.target.closest('[data-act]');
+    if (a) return dirty() ? toast('احفظ التعديلات أو تراجع عنها أول') : run(a.dataset.act, S.drawerId);
+    if (e.target.closest('#saveEdits')) return saveEdits();
+    if (e.target.closest('#undoEdits')) { clearPending(); renderDrawer(); return toast('انلغت التعديلات') }
     if (e.target.closest('[data-costedit]')) { extra.costEdit = true; renderDrawer(); setTimeout(() => { const c = $('#f_cost'); c && c.focus() }, 30); return }
     if (e.target.closest('#cBtn')) addComment();
     if (e.target.closest('#saveDraft')) saveDraft();
@@ -373,14 +427,15 @@ export function initDrawer() {
       const name = el.value.trim().toLowerCase();
       const c = S.CUSTOMERS.find(x => x.active && x.name.trim().toLowerCase() === name);
       if (!c) { toast('الزبون مو موجود بالقائمة. اختار من القائمة أو راجع الأدمن'); el.value = inv.customer || ''; return }
-      if (c.id !== inv.customer_id) await save(inv, { customer_id: c.id, customer: c.name }, true);
+      stage(inv, { customer_id: c.id, customer: c.name }, true);
       return;
     }
 
     if (el.dataset.cost) {
-      const v = num(el.value); if (v <= 0) return toast('سعر الكلفة لازم أكبر من صفر');
-      const r = await rpc('inv_set_cost', { p_id: inv.id, p_cost: v }, 'انحفظ سعر الكلفة');
-      if (r.ok) { extra.costEdit = false; await reloadLog(); await refreshInvoice(inv.id) }
+      if (el.value.trim() === '') { extra.pendingCost = null; paintSaveBar(); return }
+      const v = num(el.value); if (v <= 0) { el.value = extra.pendingCost ?? ''; return toast('سعر الكلفة لازم أكبر من صفر') }
+      extra.pendingCost = hasRole('admin') && same(v, S.COSTS[inv.id]) ? null : v;
+      paintSaveBar();
       return;
     }
 
@@ -395,6 +450,6 @@ export function initDrawer() {
     if (col === 'payment' && val !== 'credit') patch.credit_months = null;
     if (col === 'payer' && val !== 'customer') patch.transport_amt = 0;
     if (col === 'ld' && !val) patch.ld_pct = null;
-    await save(inv, patch, !!el.dataset.rer || Object.keys(patch).length > 1);
+    stage(inv, patch, !!el.dataset.rer || Object.keys(patch).length > 1);
   });
 }

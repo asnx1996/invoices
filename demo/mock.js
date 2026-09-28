@@ -197,6 +197,7 @@
       const okBasic = inv.stage === 'new' && has('rep') && inv.rep_id === session;
       const okTerms = inv.stage === 'acc' && has('acc');
       for (const k of keys) {
+        if (k === 'value' && (okBasic || okTerms)) continue;
         if (BASIC.includes(k) && !okBasic) return 'ما تكدر تعدل بيانات الطلب بهاي المرحلة';
         if (TERMS.includes(k) && !okTerms) return 'الشروط يعدلها المحاسب بمرحلة الحسابات';
         if (!BASIC.includes(k) && !TERMS.includes(k)) return 'ما عندك صلاحية';

@@ -10,6 +10,7 @@ export function can(a, inv) {
     case 'users': case 'customers': case 'backup': return admin;
     case 'reports': return admin || mgr;
     case 'editBasic': return admin || (inv.stage === 'new' && rep && own);
+    case 'editValue': return admin || (inv.stage === 'new' && rep && own) || (inv.stage === 'acc' && acc);
     case 'sendToAcc': return inv.stage === 'new' && (admin || (rep && own));
     case 'editTerms': return admin || (inv.stage === 'acc' && acc);
     case 'sendToDecision': return inv.stage === 'acc' && (admin || acc);
