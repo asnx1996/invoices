@@ -2,7 +2,7 @@ import { S, COLS, SUB, MONTHS, getInv, userName, reps, isActive, isUrgent, ageLe
 import { $, $$, esc, num, money, pct, ic, toast, ask } from './util.js';
 import { avatarHTML } from './avatars.js';
 import { can } from './can.js';
-import { run, waitingOn } from './actions.js';
+import { run, waitingOn, moveTo } from './actions.js';
 import { openDrawer } from './drawer.js';
 
 // تفضيلات اللوحة تنحفظ بالجهاز (مو بالقاعدة): الأعمدة المطوية، ترتيب كل عمود، عرض التفاصيل
@@ -211,10 +211,16 @@ function handleDrop(id, to) {
   const inv = getInv(id); if (!inv || inv.stage === to) return;
   const f = inv.stage; let a = null;
   if (f === 'new' && to === 'acc') a = 'sendToAcc';
+  else if (f === 'acc' && to === 'new') a = 'returnToRep';
   else if (f === 'acc' && to === 'decision') a = 'sendToDecision';
   else if (f === 'decision' && to === 'acc' && inv.sub === 'mgr') a = 'returnToAcc';
   else if (f === 'decision' && to === 'done' && inv.sub === 'wh') a = 'complete';
   else if (f === 'decision' && to === 'cancel' && inv.sub === 'cust') a = 'custRefuse';
-  if (!a) return toast('هذا الانتقال غير مسموح. ' + (waitingOn(inv) ? 'الخطوة الحالية: ' + waitingOn(inv) : ''));
-  run(a, id);
+  const order = { new: 1, acc: 2, decision: 3, done: 4, cancel: 4 };
+  const back = order[to] < order[f] || f === 'cancel' || f === 'done';
+  // الخطوة العادية (إذا مسموحة)، إلا الرجوع للخلف: الأدمن والمدير ينقلون مباشرة بدون سبب
+  if (a && can(a, inv) && !(back && can('move', inv))) return run(a, id);
+  if (can('move', inv) && to !== 'done') return moveTo(inv, to === 'decision' ? 'decision:mgr' : to);
+  if (a) return run(a, id);
+  toast('هذا الانتقال غير مسموح. ' + (waitingOn(inv) ? 'الخطوة الحالية: ' + waitingOn(inv) : ''));
 }

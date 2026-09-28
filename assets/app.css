@@ -279,6 +279,12 @@ section.blk h4{margin:0 0 10px;font-size:14px;color:var(--muted);display:flex;al
 .comment .by b{color:var(--text);font-weight:600}
 .comment .c-body{overflow-wrap:anywhere;white-space:pre-wrap}
 .comment.sys .c-main{border-inline-start:3px solid var(--warn)}
+.comment .by{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.comment .c-acts{margin-inline-start:auto;display:flex;gap:2px}
+.comment .c-act{font:inherit;font-size:12px;color:var(--muted,var(--faint));background:none;border:0;padding:4px 6px;border-radius:6px;cursor:pointer;min-height:28px}
+.comment .c-act:hover{background:var(--surface);color:var(--text)}
+.comment .c-act.bad:hover{color:var(--bad)}
+.comment .c-act:focus-visible{outline:2px solid var(--primary);outline-offset:1px}
 .c-av{flex:none;margin:0!important}
 .mention{color:var(--primary);background:var(--primary-soft);border-radius:4px;padding:0 3px;font-weight:600}
 .add-c{display:flex;gap:8px;align-items:center}

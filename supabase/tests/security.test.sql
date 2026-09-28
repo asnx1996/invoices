@@ -431,7 +431,6 @@ begin
   perform pg_temp.as_user(u_acc);
   perform pg_temp.t_denied('نقل: المحاسب ما ينقل', format($q$select public.inv_move(%s, 'acc', 'x')$q$, i_new3));
   perform pg_temp.as_user(u_mgr);
-  perform pg_temp.t_denied('نقل: بدون سبب مرفوض', format($q$select public.inv_move(%s, 'new', ' ')$q$, i_new3));
   perform pg_temp.t_denied('نقل: "تمت" مو هدف', format($q$select public.inv_move(%s, 'done', 'x')$q$, i_new3));
   perform pg_temp.t_ok('نقل: المدير يرجع الملغاة للحسابات', format($q$select public.inv_move(%s, 'acc', 'غلط')$q$, i_new3));
   perform pg_temp.t_eq('نقل: المرحلة + مسح الإلغاء',
@@ -451,7 +450,6 @@ begin
   perform pg_temp.as_user(u_mgr);
   perform pg_temp.t_denied('إرجاع للمندوب: المدير ما يرجع (عنده النقل)', format($q$select public.inv_return_to_rep(%s, 'x')$q$, i_new2));
   perform pg_temp.as_user(u_acc);
-  perform pg_temp.t_denied('إرجاع للمندوب: بدون تعديلات مرفوض', format($q$select public.inv_return_to_rep(%s, '')$q$, i_new2));
   perform pg_temp.t_ok('إرجاع للمندوب: المحاسب يرجع', format($q$select public.inv_return_to_rep(%s, 'غيّر القيمة')$q$, i_new2));
   perform pg_temp.t_eq('إرجاع للمندوب: رجع للجديد',
     format($q$select stage || '/' || returned from public.invoices where id = %s$q$, i_new2), 'new/1');
@@ -473,6 +471,44 @@ begin
   perform pg_temp.t_denied('قيمة: المحاسب ما يعدلها بالطلب الجديد', format('update public.invoices set value = 1 where id = %s', i_new2));
   perform pg_temp.as_user(u_rep1);
   perform pg_temp.t_denied('قيمة: المندوب ما يعدلها بالحسابات', format('update public.invoices set value = 1 where id = %s', i_new3));
+
+  -- ---------------- 011: بدون سبب + تعديل/حذف التعليقات ----------------
+  perform pg_temp.as_user(u_mgr);
+  perform pg_temp.t_ok('بدون سبب: المدير ينقل (سحب وإفلات)', format($q$select public.inv_move(%s, 'decision:mgr')$q$, i_new3));
+  perform pg_temp.t_ok('بدون سبب: المدير يرجع للحسابات', format('select public.inv_return_to_acc(%s)', i_new3));
+  perform pg_temp.t_eq('بدون سبب: تعليقات النظام بدون نص فاضي',
+    format($q$select string_agg(body, ' | ' order by id) from public.invoice_comments where invoice_id = %s and is_system and at > now() - interval '1 minute'$q$, i_new3),
+    'نقل من الحسابات إلى موافقة المدير | إرجاع للحسابات');
+  perform pg_temp.as_user(u_acc);
+  perform pg_temp.t_ok('بدون سبب: المحاسب يرجع للمندوب', format('select public.inv_return_to_rep(%s)', i_new3));
+  perform pg_temp.as_owner();
+  update public.invoices set stage = 'cancel' where id = i_new3;
+  perform pg_temp.as_user(u_admin);
+  perform pg_temp.t_ok('بدون سبب: الأدمن يرجّع الملغاة', format($q$select public.inv_move(%s, 'new', null)$q$, i_new3));
+
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_ok('تعليق: المندوب يكتب', format($q$insert into public.invoice_comments (invoice_id, body) values (%s, 'اول')$q$, i_new3), 1);
+  perform pg_temp.t_ok('تعليق: يعدل تعليقه',
+    format($q$select public.comment_edit((select max(id) from public.invoice_comments where invoice_id = %s and not is_system), 'معدّل')$q$, i_new3));
+  perform pg_temp.t_eq('تعليق: انعدل وانأشر',
+    format($q$select body || '/' || (edited_at is not null) from public.invoice_comments where invoice_id = %s and not is_system order by id desc limit 1$q$, i_new3), 'معدّل/true');
+  perform pg_temp.t_denied('تعليق: ما يعدل تعليق النظام',
+    format($q$select public.comment_edit((select max(id) from public.invoice_comments where invoice_id = %s and is_system), 'x')$q$, i_new3));
+  perform pg_temp.t_denied('تعليق: ما يحذف تعليق النظام',
+    format($q$select public.comment_delete((select max(id) from public.invoice_comments where invoice_id = %s and is_system))$q$, i_new3));
+  perform pg_temp.t_denied('تعليق: ما يعدل مباشرة', format($q$update public.invoice_comments set body = 'x' where invoice_id = %s$q$, i_new3));
+  perform pg_temp.as_user(u_acc);
+  perform pg_temp.t_denied('تعليق: غيره ما يعدله',
+    format($q$select public.comment_edit((select max(id) from public.invoice_comments where invoice_id = %s and not is_system), 'x')$q$, i_new3));
+  perform pg_temp.t_denied('تعليق: غيره ما يحذفه',
+    format($q$select public.comment_delete((select max(id) from public.invoice_comments where invoice_id = %s and not is_system))$q$, i_new3));
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_ok('تعليق: صاحبه يحذفه',
+    format($q$select public.comment_delete((select max(id) from public.invoice_comments where invoice_id = %s and not is_system))$q$, i_new3));
+  perform pg_temp.t_eq('تعليق: انحذف', format('select count(*) from public.invoice_comments where invoice_id = %s and not is_system', i_new3), '0');
+  perform pg_temp.as_user(u_admin);
+  perform pg_temp.t_ok('تعليق: الأدمن يحذف تعليق نظام',
+    format($q$select public.comment_delete((select max(id) from public.invoice_comments where invoice_id = %s and is_system))$q$, i_new3));
 
   -- ---------------- النتيجة ----------------
   perform pg_temp.as_owner();

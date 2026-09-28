@@ -218,6 +218,32 @@ function profitHTML(inv) {
     </table></div></section>`;
 }
 
+// تعليق: صاحبه يعدله ويحذفه، والأدمن يحذف أي تعليق (نفس قواعد comment_edit/comment_delete بـ 011)
+function commentHTML(c) {
+  const mine = c.author === S.ME.id;
+  const canEdit = mine && !c.is_system, canDel = hasRole('admin') || canEdit;
+  const acts = canEdit || canDel ? `<span class="c-acts">${canEdit ? `<button type="button" class="c-act" data-cedit="${c.id}">تعديل</button>` : ''}${canDel ? `<button type="button" class="c-act bad" data-cdel="${c.id}">حذف</button>` : ''}</span>` : '';
+  return `<div class="comment ${c.is_system ? 'sys' : ''}${mine ? ' mine' : ''}">${avatarHTML(c.author, 30, 'c-av')}<div class="c-main"><div class="by"><b>${esc(userName(c.author))}</b> · ${dt(c.at)}${c.edited_at ? ' · معدّل' : ''}${acts}</div><div class="c-body">${highlightMentions(esc(c.body))}</div></div></div>`;
+}
+
+function editComment(id) {
+  const c = extra.comments.find(x => x.id === id); if (!c) return;
+  const inv = S.drawerId;
+  ask('تعديل التعليق', [{ id: 'b', label: 'التعليق', type: 'textarea', req: true, value: c.body }], async v => {
+    if (v.b === c.body) return;
+    const r = await rpc('comment_edit', { p_id: id, p_body: v.b }, 'انعدل التعليق');
+    if (r.ok) reloadActivity(inv);
+  }, { okText: 'حفظ' });
+}
+
+function deleteComment(id) {
+  const inv = S.drawerId;
+  ask('حذف التعليق', [], async () => {
+    const r = await rpc('comment_delete', { p_id: id }, 'انحذف التعليق');
+    if (r.ok) reloadActivity(inv);
+  }, { okText: 'حذف', danger: true, msg: 'ينحذف التعليق نهائياً.' });
+}
+
 export function renderDrawer() {
   const real = getInv(S.drawerId); if (!real) return closeDrawer(true);
   const inv = dirty() ? { ...real, ...extra.pending } : real; // الحقول تنعرض بالتعديلات اللي ما انحفظت
@@ -257,7 +283,7 @@ export function renderDrawer() {
       </div></section>
     ${!draft && can('seeTerms', inv) ? termsHTML(inv) : ''}
     ${draft ? '' : `<section class="blk"><h4>التعليقات</h4>
-      ${extra.comments.map(c => `<div class="comment ${c.is_system ? 'sys' : ''}${c.author === S.ME.id ? ' mine' : ''}">${avatarHTML(c.author, 30, 'c-av')}<div class="c-main"><div class="by"><b>${esc(userName(c.author))}</b> · ${dt(c.at)}</div><div class="c-body">${highlightMentions(esc(c.body))}</div></div></div>`).join('') || '<div class="help" style="margin-bottom:8px">لا توجد تعليقات</div>'}
+      ${extra.comments.map(commentHTML).join('') || '<div class="help" style="margin-bottom:8px">لا توجد تعليقات</div>'}
       <div class="add-c">${avatarHTML(S.ME, 30, 'c-av')}<input type="text" id="cIn" data-mention="1" autocomplete="off" placeholder="اكتب تعليق... (@ حتى تذكر شخص)" aria-label="تعليق"><button class="btn primary" id="cBtn">إرسال</button></div></section>
     <details class="more blk" data-more="log" ${shown.log ? 'open' : ''}><summary>سجل الحركة${extra.log.length ? ` (${extra.log.length})` : ''}</summary>
       <ul class="timeline">${extra.log.slice().reverse().map(l => `<li><div>${esc(userName(l.actor))}: ${esc(l.body)}</div><div class="t">${dt(l.at)}</div></li>`).join('') || '<li class="help">—</li>'}</ul></details>`}
@@ -402,6 +428,8 @@ export function initDrawer() {
     if (e.target.closest('#saveEdits')) return saveEdits();
     if (e.target.closest('#undoEdits')) { clearPending(); renderDrawer(); return toast('انلغت التعديلات') }
     if (e.target.closest('[data-costedit]')) { extra.costEdit = true; renderDrawer(); setTimeout(() => { const c = $('#f_cost'); c && c.focus() }, 30); return }
+    const ce = e.target.closest('[data-cedit]'); if (ce) return editComment(+ce.dataset.cedit);
+    const cd = e.target.closest('[data-cdel]'); if (cd) return deleteComment(+cd.dataset.cdel);
     if (e.target.closest('#cBtn')) addComment();
     if (e.target.closest('#saveDraft')) saveDraft();
   });

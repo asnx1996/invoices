@@ -385,18 +385,16 @@
       const v = getInvFor(p_id);
       if (v.stage !== 'decision' || v.sub !== 'mgr') throw new Error('الطلب مو بانتظار موافقة المدير');
       if (!(has('mgr') || has('admin'))) throw new Error('الإرجاع للمدير فقط');
-      if (blank(p_reason)) throw new Error('سبب الإرجاع مطلوب');
       v.returned = (v.returned || 0) + 1;
-      db.invoice_comments.push({ id: db.seq.invoice_comments++, invoice_id: v.id, author: session, body: 'إرجاع للحسابات: ' + p_reason, is_system: true, at: iso(Date.now()) });
+      db.invoice_comments.push({ id: db.seq.invoice_comments++, invoice_id: v.id, author: session, body: 'إرجاع للحسابات' + (blank(p_reason) ? '' : ': ' + p_reason.trim()), is_system: true, at: iso(Date.now()) });
       move(v, 'acc', null, 'أرجع الطلب للحسابات'); return v;
     },
     inv_return_to_rep({ p_id, p_reason }) {
       const v = getInvFor(p_id);
       if (v.stage !== 'acc') throw new Error('الطلب مو بمرحلة الحسابات');
       if (!(has('acc') || has('admin'))) throw new Error('الإرجاع للمحاسب فقط');
-      if (blank(p_reason)) throw new Error('اكتب التعديلات المطلوبة');
       v.returned = (v.returned || 0) + 1;
-      db.invoice_comments.push({ id: db.seq.invoice_comments++, invoice_id: v.id, author: session, body: 'إرجاع للمندوب — التعديلات المطلوبة: ' + p_reason.trim(), is_system: true, at: iso(Date.now()) });
+      db.invoice_comments.push({ id: db.seq.invoice_comments++, invoice_id: v.id, author: session, body: 'إرجاع للمندوب' + (blank(p_reason) ? '' : ' — التعديلات المطلوبة: ' + p_reason.trim()), is_system: true, at: iso(Date.now()) });
       move(v, 'new', null, 'أرجع الطلب للمندوب'); return v;
     },
     inv_move({ p_id, p_target, p_reason }) {
@@ -404,17 +402,28 @@
       const ORD = { new: 1, acc: 2, 'decision:mgr': 3, 'decision:cust': 4, 'decision:wh': 5 };
       if (!(has('admin') || has('mgr'))) throw new Error('نقل الطلب للأدمن والمدير فقط');
       if (!['new', 'acc', 'decision:mgr', 'decision:cust', 'decision:wh', 'cancel'].includes(p_target)) throw new Error('مرحلة غير معروفة');
-      if (blank(p_reason)) throw new Error('سبب النقل مطلوب');
       const v = getInvFor(p_id);
       const from = v.stage + (v.sub ? ':' + v.sub : '');
       if (from === p_target) throw new Error('الطلب أصلاً بهاي المرحلة');
       const [stage, sub = null] = p_target.split(':');
       if ((ORD[p_target] || 6) < (ORD[from] || 0)) v.returned = (v.returned || 0) + 1;
       if (v.stage === 'done') v.sales_no = null;
-      v.cancel_reason = stage === 'cancel' ? p_reason.trim() : null;
+      v.cancel_reason = stage === 'cancel' && !blank(p_reason) ? p_reason.trim() : null;
       v.closed_at = null;
-      db.invoice_comments.push({ id: db.seq.invoice_comments++, invoice_id: v.id, author: session, body: `نقل من ${NAMES[from] || from} إلى ${NAMES[p_target]}: ${p_reason.trim()}`, is_system: true, at: iso(Date.now()) });
+      db.invoice_comments.push({ id: db.seq.invoice_comments++, invoice_id: v.id, author: session, body: `نقل من ${NAMES[from] || from} إلى ${NAMES[p_target]}${blank(p_reason) ? '' : ': ' + p_reason.trim()}`, is_system: true, at: iso(Date.now()) });
       move(v, stage, sub, 'نقل الطلب إلى ' + NAMES[p_target]); return v;
+    },
+    comment_edit({ p_id, p_body }) {
+      const c = db.invoice_comments.find(x => x.id === p_id); if (!c) throw new Error('التعليق غير موجود');
+      if (c.is_system) throw new Error('تعليقات النظام ما تتعدل');
+      if (c.author !== session) throw new Error('تعدل تعليقك بس');
+      if (blank(p_body)) throw new Error('التعليق فارغ');
+      c.body = p_body.trim(); c.edited_at = iso(Date.now()); return null;
+    },
+    comment_delete({ p_id }) {
+      const c = db.invoice_comments.find(x => x.id === p_id); if (!c) throw new Error('التعليق غير موجود');
+      if (!(has('admin') || (!c.is_system && c.author === session))) throw new Error('تحذف تعليقك بس');
+      db.invoice_comments = db.invoice_comments.filter(x => x !== c); return null;
     },
     inv_customer_accept({ p_id }) {
       const v = getInvFor(p_id);
