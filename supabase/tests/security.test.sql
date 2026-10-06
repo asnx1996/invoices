@@ -434,7 +434,7 @@ begin
   perform pg_temp.t_denied('نقل: "تمت" مو هدف', format($q$select public.inv_move(%s, 'done', 'x')$q$, i_new3));
   perform pg_temp.t_ok('نقل: المدير يرجع الملغاة للحسابات', format($q$select public.inv_move(%s, 'acc', 'غلط')$q$, i_new3));
   perform pg_temp.t_eq('نقل: المرحلة + مسح الإلغاء',
-    format($q$select stage || '/' || coalesce(cancel_reason, '-') || '/' || coalesce(closed_at::text, '-') from public.invoices where id = %s$q$, i_new3), 'acc/-/-');
+    format($q$select stage || '/' || coalesce(nullif(cancel_reason, ''), '-') || '/' || coalesce(closed_at::text, '-') from public.invoices where id = %s$q$, i_new3), 'acc/-/-');
   perform pg_temp.as_user(u_admin);
   perform pg_temp.t_ok('نقل: الأدمن ينقل لموافقة المدير', format($q$select public.inv_move(%s, 'decision:mgr', 'x')$q$, i_new3));
   perform pg_temp.t_ok('نقل: الأدمن يرجعه للطلب الجديد', format($q$select public.inv_move(%s, 'new', 'نعيد')$q$, i_new3));

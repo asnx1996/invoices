@@ -39,9 +39,9 @@ begin
   update public.invoices set
       stage = t_stage::public.inv_stage, sub = t_sub::public.inv_sub, stage_at = now(),
       returned = returned + case when ord_to < ord_from then 1 else 0 end,
-      cancel_reason = case when t_stage = 'cancel' then nullif(btrim(coalesce(p_reason, '')), '') else null end,
+      cancel_reason = case when t_stage = 'cancel' then btrim(coalesce(p_reason, '')) else '' end, -- العمود not null على القاعدة
       closed_at = case when t_stage = 'cancel' then now() else null end,
-      sales_no = case when v.stage::text = 'done' then null else sales_no end
+      sales_no = case when v.stage::text = 'done' then '' else sales_no end
    where id = p_id returning * into v;
 
   insert into public.invoice_comments (invoice_id, body, is_system, author)
