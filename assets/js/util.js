@@ -11,6 +11,10 @@ let CUR = 'د.ع';
 export const setCurrency = c => { CUR = c || 'د.ع' };
 export const cur = () => CUR;
 export const money = n => fmt(n) + ' ' + CUR;
+// سعر صرف الدولار بالدينار (يحدده الأدمن) — المندوب يكدر يكتب القيمة بالدينار وتتحول
+let RATE = 1650;
+export const setRate = r => { const n = num(r); RATE = n > 0 ? n : 1650 };
+export const rate = () => RATE;
 
 // حقول الأرقام: نص مع فواصل الآلاف أثناء الكتابة (type=number ما يقبل فواصل)
 export const numAttrs = 'type="text" inputmode="decimal" autocomplete="off" dir="ltr" data-num="1"';

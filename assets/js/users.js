@@ -1,6 +1,6 @@
 import { S, ROLES, rolesText, changed } from './state.js';
 import { sb, rpc, loadProfiles, saveSetting } from './api.js';
-import { $, esc, ic, ask, toast, genPw, cur, setCurrency } from './util.js';
+import { $, esc, ic, ask, toast, genPw, cur, setCurrency, rate, setRate, num } from './util.js';
 import { backupNow } from './backup.js';
 import { avatarHTML, openAvatarPicker } from './avatars.js';
 
@@ -8,6 +8,7 @@ let LOGINS = {};
 
 export async function renderUsers() {
   $('#setCur').value = cur();
+  $('#setRate').value = rate();
   const { data } = await sb.rpc('admin_list_logins');
   LOGINS = Object.fromEntries((data || []).map(r => [r.id, r.login]));
   $('#usersTbl').innerHTML = `<thead><tr><th>الاسم</th><th>اسم المستخدم</th><th>الأدوار</th><th>مفعّل</th><th></th></tr></thead><tbody>${S.PROFILES.map(u => {
@@ -47,6 +48,12 @@ export function initUsers() {
     if (!v) return toast('اكتب العملة');
     if (!await saveSetting('currency', v)) return;
     setCurrency(v); changed(); toast('صارت العملة: ' + v);
+  };
+  $('#setRateBtn').onclick = async () => {
+    const v = num($('#setRate').value);
+    if (v <= 0) return toast('اكتب سعر صرف صحيح، مثل 1650');
+    if (!await saveSetting('usd_rate', String(v))) return;
+    setRate(v); changed(); toast('صار سعر الصرف: ' + v);
   };
   $('#addUserBtn').onclick = () => ask('مستخدم جديد', [
     { id: 'n', label: 'الاسم الكامل', type: 'text', req: true },

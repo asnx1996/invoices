@@ -1,7 +1,7 @@
 import { S, COLS, SUB, PAY, PAY_LEGACY, PAYER, PAYER_LEGACY, MONTHS, POINT_RATE, hasRole, getInv, userName, reps, isActive, isUrgent,
   ldAmount, transportAdded, totalAfterTransport, pointsPct, onChange } from './state.js';
 import { renderBoard } from './board.js';
-import { $, esc, num, fmt, money, pct, dt, dOnly, ic, toast, ask, cur, numAttrs, numVal } from './util.js';
+import { $, esc, num, fmt, money, pct, dt, dOnly, ic, toast, ask, cur, rate, numAttrs, numVal } from './util.js';
 import { sb, rpc, refreshInvoice } from './api.js';
 import { can } from './can.js';
 import { run, waitingOn, missingBasic, missingTerms } from './actions.js';
@@ -9,13 +9,13 @@ import { avatarHTML } from './avatars.js';
 import { highlightMentions, MENTION_HELP } from './mentions.js';
 
 // pending: تعديلات مكتوبة بالدرج وما انحفظت بعد (تنحفظ بزر "حفظ التعديلات")
-let extra = { comments: [], log: [], pdfUrl: null, costEdit: false, pending: {}, pendingCost: null };
+let extra = { comments: [], log: [], pdfUrl: null, costEdit: false, pending: {}, pendingCost: null, valCur: null, iqd: null };
 let returnFocus = null;
 const shown = { steps: false, log: false }; // الأقسام المطوية تبقى مثل ما تركها المستخدم
 
 export async function openDrawer(id, push = true) {
   const wasOpen = !!S.drawerId;
-  if (S.drawerId !== id) extra = { comments: [], log: [], pdfUrl: null, costEdit: false, pending: {}, pendingCost: null };
+  if (S.drawerId !== id) extra = { comments: [], log: [], pdfUrl: null, costEdit: false, pending: {}, pendingCost: null, valCur: null, iqd: null };
   else Object.assign(extra, { comments: [], log: [], pdfUrl: null });
   S.drawerId = id;
   renderDrawer();
@@ -55,7 +55,7 @@ export async function reloadActivity(id) {
 }
 
 const dirty = () => Object.keys(extra.pending).length > 0 || extra.pendingCost != null;
-const clearPending = () => { extra.pending = {}; extra.pendingCost = null; extra.costEdit = false };
+const clearPending = () => { extra.pending = {}; extra.pendingCost = null; extra.costEdit = false; extra.valCur = null; extra.iqd = null };
 const same = (a, b) => String(a ?? '') === String(b ?? '');
 
 // زر الحفظ يتحدث بدون إعادة رسم الدرج (حتى ما يضيع المؤشر من الحقل)
@@ -126,6 +126,19 @@ function fld(label, col, val, { type = 'text', req = false, dis = false, full = 
   else if (type === 'textarea') input = `<textarea id="${id}" data-f="${col}" ${dis ? 'disabled' : ''}>${esc(val)}</textarea>`;
   else input = `<input ${type === 'number' ? numAttrs : `type="${type}"`} id="${id}" data-f="${col}" value="${esc(type === 'number' ? numVal(val) : val ?? '')}" ${dis ? 'disabled' : ''} ${rer ? 'data-rer="1"' : ''} ${list ? `list="${list}"` : ''}>`;
   return `<div class="fld ${full ? 'full' : ''}"><label for="${id}">${label}${req ? ' <span class="req">*</span>' : ''}</label>${input}${help ? `<div class="help">${help}</div>` : ''}</div>`;
+}
+// قيمة الفاتورة تنحفظ بالدولار. اللي يعدلها يختار العملة أول؛ الدينار ينقسم على سعر الصرف
+function valueFld(inv, eb) {
+  const help = eb && can('editValue', inv) ? 'يعدلها المحاسب بمرحلة الحسابات' : '';
+  if (!can('editValue', inv)) return fld(`قيمة الفاتورة (${cur()})`, 'value', inv.value, { type: 'number', dis: true });
+  const vc = extra.valCur ?? (filled(inv.value) && inv.value ? 'usd' : '');
+  const pick = `<div class="fld"><label for="f_valcur">عملة الفاتورة <span class="req">*</span></label>
+    <select id="f_valcur" data-valcur="1"><option value="">— اختر —</option>${[['usd', 'دولار'], ['iqd', 'دينار']].map(([k, t]) => `<option value="${k}" ${vc === k ? 'selected' : ''}>${t}</option>`).join('')}</select></div>`;
+  if (!vc) return pick + `<div class="fld"><label for="f_value">قيمة الفاتورة <span class="req">*</span></label><input ${numAttrs} id="f_value" disabled placeholder="اختار العملة أول"></div>`;
+  if (vc === 'usd') return pick + fld(`قيمة الفاتورة (${cur()})`, 'value', inv.value, { type: 'number', req: true, rer: true, help });
+  const conv = extra.iqd ? `= ${money(inv.value)} (سعر الصرف ${fmt(rate())})` : `تنقسم على سعر الصرف ${fmt(rate())} وتنحفظ بالدولار`;
+  return pick + `<div class="fld"><label for="f_value">قيمة الفاتورة (دينار) <span class="req">*</span></label>
+    <input ${numAttrs} id="f_value" data-iqd="1" value="${esc(numVal(extra.iqd))}"><div class="help">${conv}${help ? ' · ' + help : ''}</div></div>`;
 }
 const tog = (label, col, val, dis) => `<label class="toggle" for="f_${col}"><input type="checkbox" id="f_${col}" data-f="${col}" data-rer="1" ${val ? 'checked' : ''} ${dis ? 'disabled' : ''}>${label}</label>`;
 const filled = v => String(v ?? '').trim() !== '';
@@ -273,7 +286,7 @@ export function renderDrawer() {
         ${customerFld(inv, eb)}
         ${fld('رقم عرض السعر', 'quote_no', inv.quote_no, { dis: qDis })}
         ${fld('رقم الحجز', 'res_no', inv.res_no, { dis: rDis, help: 'واحد منهم فقط' })}
-        ${fld(`قيمة الفاتورة (${cur()})`, 'value', inv.value, { type: 'number', req: true, dis: !can('editValue', inv), rer: true, help: eb && can('editValue', inv) ? 'يعدلها المحاسب بمرحلة الحسابات' : '' })}
+        ${valueFld(inv, eb)}
         ${hasRole('admin') && inv.stage === 'new' ? fld('المندوب', 'rep_id', inv.rep_id, { opts: Object.fromEntries(reps().map(r => [r.id, r.full_name])), rer: true }) : `<div class="fld"><label>المندوب</label><input type="text" value="${esc(userName(inv.rep_id))}" disabled></div>`}
         <div class="fld full"><label>ملف الفاتورة PDF <span class="req">*</span></label>
           <div class="pdf">${ic('file')}<span class="name" title="${esc(inv.pdf_name || '')}">${inv.pdf_path || inv.pdf_name ? esc(inv.pdf_name || 'ملف') + ' · ' + Math.round((inv.pdf_size || 0) / 1024) + ' KB' : '<span style="color:var(--faint)">ما مرفوع ملف</span>'}</span>
@@ -456,6 +469,22 @@ export function initDrawer() {
       const c = S.CUSTOMERS.find(x => x.active && x.name.trim().toLowerCase() === name);
       if (!c) { toast('الزبون مو موجود بالقائمة. اختار من القائمة أو راجع الأدمن'); el.value = inv.customer || ''; return }
       stage(inv, { customer_id: c.id, customer: c.name }, true);
+      return;
+    }
+
+    if (el.dataset.valcur) {
+      extra.valCur = el.value;
+      // نحول القيمة الموجودة للدينار حتى المندوب يشوفها بالعملة اللي اختارها
+      const v = 'value' in extra.pending ? extra.pending.value : inv.value;
+      extra.iqd = el.value === 'iqd' && num(v) > 0 ? Math.round(num(v) * rate()) : null;
+      renderDrawer();
+      const f = $('#f_value'); f && !f.disabled && f.focus();
+      return;
+    }
+    if (el.dataset.iqd) {
+      const v = el.value.trim() === '' ? null : num(el.value);
+      extra.iqd = v;
+      stage(inv, { value: v === null ? null : Math.round(v / rate() * 100) / 100 }, true);
       return;
     }
 

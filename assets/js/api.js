@@ -1,6 +1,6 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 import { S, changed, hasRole } from './state.js';
-import { toast, DAY, setCurrency } from './util.js';
+import { toast, DAY, setCurrency, setRate } from './util.js';
 
 export const configured = /^https:\/\/.+\.supabase\.co$/.test(SUPABASE_URL) && SUPABASE_ANON_KEY.length > 40;
 export const sb = configured ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
@@ -64,6 +64,7 @@ export async function loadSettings() {
   if (error) return; // قبل ما تتشغل 005 نبقى على الافتراضي
   const m = Object.fromEntries((data || []).map(r => [r.key, r.value]));
   setCurrency(m.currency);
+  setRate(m.usd_rate);
 }
 
 export async function saveSetting(key, value) {
