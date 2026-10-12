@@ -52,6 +52,7 @@
 <!-- شاشة الدخول -->
 <div class="auth" id="authView">
   <div class="auth-card">
+    <div class="auth-brand"><img src="assets/brand/atlasplast-logo.png" alt="Atlasplast" width="344" height="200"><span>ATLASPLAST · مساحة العمل</span></div>
     <h1>لوحة فواتير المبيعات</h1>
     <p class="sub">سجّل دخولك للمتابعة</p>
     <div id="cfgWarn"></div>
@@ -68,7 +69,7 @@
 <a class="skip" href="#viewBoard" id="skipLink">تخطّى إلى المحتوى</a>
 <header>
   <div class="bar">
-    <h1 class="brand"><span class="logo" aria-hidden="true"><svg class="i"><use href="#ic-board"/></svg></span>فواتير المبيعات</h1>
+    <h1 class="brand"><img class="brand-image" src="assets/brand/atlasplast-logo.png" alt="Atlasplast" width="344" height="200"><span>فواتير المبيعات</span></h1>
     <nav class="tabs" aria-label="الأقسام">
       <button class="tab" data-view="board" aria-current="page">اللوحة</button>
       <button class="tab hidden" data-view="reports" id="tabReports">التقارير</button>
@@ -101,6 +102,10 @@
 </header>
 
 <main tabindex="-1" id="viewBoard">
+  <section class="atlas-banner" aria-label="مساحة عمل أطلس بلاست">
+    <div><span class="atlas-eyebrow" dir="ltr">ATLASPLAST</span><h2>كل طلب، خطوة للأمام.</h2><p>طلباتك وفواتيرك، من البداية إلى التسليم.</p></div>
+    <span class="atlas-banner-mark" aria-hidden="true">A<span> / </span>P</span>
+  </section>
   <div class="stats" id="stats"></div>
   <div class="board-wrap"><div class="board" id="board"></div></div>
 </main>

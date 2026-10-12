@@ -10,7 +10,8 @@ const bundle = fileURLToPath(u('./dist/app.bundle.js'));
 execSync(`npx --yes esbuild@0.24.0 "${fileURLToPath(u('./dist/assets/js/main.js'))}" --bundle --format=iife --target=es2020 --charset=utf8 --outfile="${bundle}"`, { stdio: 'inherit' });
 
 const src = readFileSync(u('../index.html'), 'utf8');
-const body = src.slice(src.indexOf('<body>') + 6, src.indexOf('</body>')).trim();
+const embedAsset = path => 'data:image/' + (path.endsWith('.png') ? 'png' : 'jpeg') + ';base64,' + readFileSync(u('../' + path)).toString('base64');
+const body = src.slice(src.indexOf('<body>') + 6, src.indexOf('</body>')).trim().replace(/assets\/brand\/atlasplast-logo\.png/g, embedAsset);
 // "</script" داخل الكود يسكّر الوسم بالغلط
 const js = f => readFileSync(f, 'utf8').replace(/<\/script/gi, '<\\/script');
 
@@ -25,7 +26,7 @@ const out = `<!DOCTYPE html>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
 <style>
-${readFileSync(u('../assets/app.css'), 'utf8')}
+${readFileSync(u('../assets/app.css'), 'utf8').replace(/backgrounds\/atlas-(light|dark)\.png/g, path => embedAsset('assets/' + path))}
 ${readFileSync(u('./demo.css'), 'utf8')}
 </style>
 </head>
@@ -35,7 +36,7 @@ ${body}
 ${js(u('./mock.js'))}
 </script>
 <script>
-${js(bundle).replace(/assets\/backgrounds\/(ledger|midnight)\.jpg/g, (_, name) => 'data:image/jpeg;base64,' + readFileSync(u('../assets/backgrounds/' + name + '.jpg')).toString('base64'))}
+${js(bundle).replace(/assets\/backgrounds\/[a-z-]+\.(jpg|png)/g, embedAsset)}
 </script>
 </body>
 </html>
