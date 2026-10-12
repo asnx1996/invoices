@@ -429,12 +429,12 @@ tr.off td{opacity:.55}
 .install{display:none}
 
 /* ---------- صورة الخلفية (يختارها المستخدم لجهازه) ---------- */
-body.has-bg{background:linear-gradient(color-mix(in srgb,var(--bg) 30%,transparent),color-mix(in srgb,var(--bg) 30%,transparent)),var(--bg-img) center/cover fixed,var(--bg)}
+body.has-bg{background:var(--bg);min-height:100vh;min-height:100dvh;isolation:isolate}
+body.has-bg::before{content:"";position:fixed;inset:0;z-index:-1;background:var(--bg-img) center/cover no-repeat;pointer-events:none}
 body.has-bg .column{background:color-mix(in srgb,var(--col) 72%,transparent);-webkit-backdrop-filter:blur(14px) saturate(160%);backdrop-filter:blur(14px) saturate(160%)}
 body.has-bg .stat{background:color-mix(in srgb,var(--surface) 82%,transparent);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
 body.has-bg .page .panel{background:color-mix(in srgb,var(--surface) 92%,transparent)}
 @media (prefers-reduced-transparency:reduce){body.has-bg .column{background:var(--col)}body.has-bg .stat{background:var(--surface)}}
-@media (max-width:640px){body.has-bg{background-attachment:scroll}}
 
 /* مساحة الحسابات: ثيم عاجي مع نفس ألوان الحالات ودلالاتها */
 :root[data-theme="ivory"]{
@@ -478,13 +478,6 @@ body.has-bg .stat,body.has-bg .page .panel{background:var(--surface)}
 .auth-brand{display:flex;flex-direction:column;align-items:center;gap:12px;margin-bottom:26px;padding-bottom:22px;border-bottom:1px solid var(--border)}
 .auth-brand img{width:172px;height:100px;object-fit:contain;background:#fff;border-radius:10px}
 .auth-brand span{font-size:11px;color:var(--muted)}
-.atlas-banner{position:relative;isolation:isolate;overflow:hidden;margin:18px 18px 0;padding:24px 30px;border-radius:16px;background:#09182c url('backgrounds/atlas-dark.png') center/cover;color:#fff;display:flex;align-items:center;justify-content:space-between;gap:20px;min-height:150px}
-.atlas-banner::before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(to left,#09182cf2,#09182cb3 55%,#09182c22);pointer-events:none}
-.atlas-eyebrow{font-size:11px;letter-spacing:.2em;color:#a5ddf7}
-.atlas-banner h2{font-size:clamp(22px,3vw,30px);margin:8px 0;line-height:1.5}
-.atlas-banner p{font-size:14px;color:#d8e9f4;margin:0}
-.atlas-banner-mark{font:600 clamp(32px,5vw,68px)/1 system-ui,sans-serif;direction:ltr;color:#fff9;padding-inline:18px;white-space:nowrap}
-.atlas-banner-mark span{color:#74caed}
 .appearance-option{transition:border-color .18s,box-shadow .18s,transform .22s var(--ease)}
 .appearance-option img{outline:1px solid #0000001a;outline-offset:-1px}
 @media(hover:hover) and (prefers-reduced-motion:no-preference){
@@ -496,13 +489,11 @@ body.has-bg .stat,body.has-bg .page .panel{background:var(--surface)}
   .auth-brand{animation:atlasReveal .55s var(--ease-out) both}
   .auth-card h1,.auth-card .sub{animation:atlasReveal .55s .08s var(--ease-out) both}
   .auth-card .fld{animation:atlasReveal .55s .16s var(--ease-out) both}
-  .atlas-banner>div{animation:atlasReveal .55s .08s var(--ease-out) both}
-  .atlas-banner-mark{animation:atlasReveal .7s .18s var(--ease-out) both}
   @keyframes atlasReveal{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 }
 :root[data-theme="dark"] .auth{background-image:linear-gradient(90deg,transparent,#0b112044),url('backgrounds/atlas-dark.png')}
 @media(prefers-color-scheme:dark){:root:not([data-theme]) .auth{background-image:linear-gradient(90deg,transparent,#0b112044),url('backgrounds/atlas-dark.png')}}
-@media(max-width:640px){.atlas-banner{margin:12px 12px 0;padding:18px;min-height:132px}.atlas-banner-mark{display:none}.brand{font-size:15px}.brand-image{width:62px;height:38px}.auth-card{padding:24px}}
+@media(max-width:640px){.brand{font-size:15px}.brand-image{width:62px;height:38px}.auth-card{padding:24px}}
 
 /* Mood palettes share the existing semantic status colors. */
 :root[data-theme="anime"]{
@@ -525,7 +516,6 @@ body.has-bg .stat,body.has-bg .page .panel{background:var(--surface)}
 :root:is([data-theme="anime"],[data-theme="nature"],[data-theme="future"]) .auth{
   background-image:linear-gradient(90deg,transparent,color-mix(in srgb,var(--bg) 40%,transparent)),var(--mood-img);
 }
-:root:is([data-theme="anime"],[data-theme="nature"],[data-theme="future"]) .atlas-banner{background-image:var(--mood-img)}
 .mood-option{text-align:start;color:var(--text);font:inherit}
 .mood-option[aria-pressed="true"]{border-color:var(--primary);background:var(--primary-soft);box-shadow:0 0 0 1px var(--primary)}
 .mood-option[aria-pressed="true"] strong::before{content:'✓ ';color:var(--primary)}
@@ -536,7 +526,7 @@ body.has-bg .stat,body.has-bg .page .panel{background:var(--surface)}
   --r:14px;--control-r:12px;--panel-r:20px;--theme-ink:#794287;
   --theme-header:linear-gradient(115deg,#FFF9F4,#F7EDF8);
   --theme-detail:linear-gradient(120deg,#FAF0F6,#F0DFF3);
-  --theme-line:#C7A5CE;--theme-banner:#302238;
+  --theme-line:#C7A5CE;
   --shadow-card:0 0 0 1px #79428726,0 3px 0 #79428712,0 5px 12px -8px #79428740;
   --shadow-lg:0 14px 36px -10px #49304D40;
 }
@@ -544,7 +534,7 @@ body.has-bg .stat,body.has-bg .page .panel{background:var(--surface)}
   --r:7px;--control-r:6px;--panel-r:12px;--theme-ink:#67E8F9;
   --theme-header:linear-gradient(115deg,#10162B,#1C2441);
   --theme-detail:linear-gradient(120deg,#151B33,#193E50);
-  --theme-line:#367384;--theme-banner:#0C1024;
+  --theme-line:#367384;
   --shadow-card:0 0 0 1px #67E8F930,0 4px 16px #00000040;
   --shadow-lg:0 18px 48px #00000070,0 0 0 1px #67E8F930;
 }
@@ -552,7 +542,7 @@ body.has-bg .stat,body.has-bg .page .panel{background:var(--surface)}
   --r:12px;--control-r:10px;--panel-r:18px;--theme-ink:#375E55;
   --theme-header:linear-gradient(115deg,#FCFEFC,#E8F0E9);
   --theme-detail:linear-gradient(120deg,#F3F7F3,#DCECE6);
-  --theme-line:#9CB9AA;--theme-banner:#1D332D;
+  --theme-line:#9CB9AA;
   --shadow-card:0 0 0 1px #375E5526,0 3px 8px -3px #29443826;
   --shadow-lg:0 16px 40px -12px #1D332D50;
 }
@@ -575,12 +565,6 @@ body.has-bg .stat,body.has-bg .page .panel{background:var(--surface)}
 :root[data-mood] :is(input,select,textarea){accent-color:var(--primary)}
 :root[data-mood] input::placeholder,:root[data-mood] textarea::placeholder{color:var(--faint);opacity:1}
 :root[data-mood] .auth-card{border-top:3px solid var(--theme-line)}
-:root[data-mood] .atlas-banner{background-color:var(--theme-banner);background-size:auto 100%;background-repeat:no-repeat;background-position:left center;border-radius:var(--panel-r);min-height:220px;box-shadow:var(--shadow-lg)}
-:root[data-mood] .atlas-banner::before{background:linear-gradient(to left,var(--theme-banner) 30%,transparent 80%)}
-:root[data-mood] .atlas-banner>div{max-width:55%;padding:10px 14px;border-radius:var(--control-r);background:var(--theme-banner)}
-:root[data-mood] .atlas-banner-mark{display:none}
-:root[data-mood] .atlas-eyebrow{color:#E2EEFA}
-:root[data-mood] .atlas-banner p{color:#E2EEFA}
 :root[data-theme="anime"] .card:not(.urgent){border-bottom:2px solid #D8BCDF}
 :root[data-theme="anime"] .col-head{background:linear-gradient(120deg,#F7EDF8,#EFE4F0)}
 :root[data-theme="nature"] .col-head{background:linear-gradient(120deg,#EDF4EE,#E1EBE4)}
@@ -592,12 +576,7 @@ body.has-bg .stat,body.has-bg .page .panel{background:var(--surface)}
   :root[data-mood] .card:not(.urgent):hover{box-shadow:var(--shadow-card),0 5px 16px -8px var(--theme-ink)}
   :root[data-mood] tbody tr:hover{background:var(--surface-2)}
 }
-@media(max-width:640px){
-  :root[data-mood] .atlas-banner{min-height:180px;padding:14px;background-position:left center}
-  :root[data-mood] .atlas-banner>div{max-width:70%;padding:10px}
-  :root[data-mood] .atlas-banner h2{font-size:21px}
-  :root[data-mood] .atlas-banner p{font-size:12px}
-}
+
 @media(prefers-contrast:more){
   :root[data-mood] :is(.card,.stat,.panel,dialog,.btn,.icon-btn,input,select,textarea){border:1px solid var(--text)}
 }
