@@ -64,8 +64,9 @@ function applyTheme() {
 let lookKey = '';
 const onHome = () => { const h = document.querySelector('#viewHome'); return !!h && !h.classList.contains('hidden') };
 
-function setLook(url, blur) {
+function setLook(url, blur, fit) {
   document.body.classList.toggle('has-bg', !!url);
+  document.body.classList.toggle('bg-contain', fit === 'contain');
   if (url) document.body.style.setProperty('--bg-img', `url("${url.startsWith('data:') ? url : new URL(url, document.baseURI).href}")`);
   else document.body.style.removeProperty('--bg-img');
   document.body.style.setProperty('--bg-blur', blur + 'px');
@@ -74,11 +75,11 @@ function setLook(url, blur) {
 
 // تنادى بعد كل تغيير؛ ما تعيد الرسم إذا ما تغير شي
 export function applyLook() {
-  const b = onHome() ? null : getBoard(), url = boardBgUrl(b), blur = b ? +b.blur || 0 : 0;
-  const key = (url || '').slice(0, 64) + (url || '').length + '|' + blur;
+  const b = onHome() ? null : getBoard(), url = boardBgUrl(b), blur = b ? +b.blur || 0 : 0, fit = b && b.bg_fit;
+  const key = (url || '').slice(0, 64) + (url || '').length + '|' + blur + '|' + fit;
   if (key === lookKey) return;
   lookKey = key;
-  setLook(url, blur);
+  setLook(url, blur, fit);
 }
 
 function syncChoices() {
@@ -91,19 +92,24 @@ function syncChoices() {
   $('#bgLegend').textContent = `خلفية بورد "${b.name}" (تطلع لكل أعضاء البورد)`;
   $('#customBackground').hidden = !b.bg_custom;
   $('#bgBlur').value = +b.blur || 0; $('#bgBlurV').textContent = (+b.blur || 0) + 'px';
+  $('#bgFitRow').hidden = !('bg_fit' in b);
+  document.querySelectorAll('[name="bgFit"]').forEach(el => { el.checked = el.value === (b.bg_fit || 'cover') });
 }
 function openAppearance() { syncChoices(); $('#appearanceDialog').showModal() }
 
+// الصورة المرفوعة: دقة عالية (حتى 2560) وننزل الجودة بس إذا طلعت ثقيلة على القاعدة
 function shrink(file) {
   return new Promise((resolve, reject) => {
     const img = new Image(), src = URL.createObjectURL(file);
     img.onload = () => {
       try {
-        const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
+        const scale = Math.min(1, 2560 / Math.max(img.width, img.height));
         const canvas = document.createElement('canvas');
         canvas.width = Math.max(1, Math.round(img.width * scale)); canvas.height = Math.max(1, Math.round(img.height * scale));
         canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/jpeg', .78));
+        let q = .9, out = canvas.toDataURL('image/jpeg', q);
+        while (out.length > 3800000 && q > .5) { q -= .1; out = canvas.toDataURL('image/jpeg', q) }
+        resolve(out);
       } catch { reject(new Error('تعذّر تجهيز الصورة')) }
       finally { URL.revokeObjectURL(src) }
     };
@@ -119,6 +125,9 @@ export function initAppearance() {
   dialog.innerHTML = `<div class="appearance-head"><div><h2 id="appearanceTitle">مظهر الموقع</h2><p class="help">الألوان تنحفظ على هذا الجهاز</p></div><button type="button" class="icon-btn" id="appearanceClose" aria-label="إغلاق مظهر الموقع">×</button></div>
     <div class="appearance-body">
     <fieldset id="bgFieldset"><legend id="bgLegend">خلفية البورد</legend>
+      <div class="fit-row" id="bgFitRow" role="radiogroup" aria-label="طريقة عرض الصورة">
+        <label class="role-chk"><input type="radio" name="bgFit" value="cover">ملء الشاشة</label>
+        <label class="role-chk"><input type="radio" name="bgFit" value="contain">إظهار الصورة كاملة</label></div>
       <label class="blur-row" for="bgBlur"><span>ضبابية الخلفية</span><input type="range" id="bgBlur" min="0" max="30" step="1" value="0"><output id="bgBlurV" for="bgBlur">0px</output></label>
       <div class="appearance-grid">${BACKGROUNDS.map(([id, title, url]) => `<label class="appearance-option"><input type="radio" name="appearanceBackground" value="${id}">${url ? `<img src="${url}" alt="" width="240" height="135" loading="lazy">` : '<span class="background-plain" aria-hidden="true"></span>'}<strong>${title}</strong></label>`).join('')}</div>
       <label class="appearance-system" id="customBackground"><input type="radio" name="appearanceBackground" value="custom"> الصورة المرفوعة</label></fieldset>
@@ -147,13 +156,14 @@ export function initAppearance() {
     const b = getBoard(), admin = b && hasRole('admin');
     if (e.target.name === 'appearanceBackground' && admin) await saveBoardLook(b.id, { bg: e.target.value });
     if (e.target.id === 'bgBlur' && admin) await saveBoardLook(b.id, { blur: +e.target.value });
+    if (e.target.name === 'bgFit' && admin) await saveBoardLook(b.id, { bg_fit: e.target.value });
     syncChoices();
   });
   // معاينة مباشرة للضبابية وهو يسحب، والحفظ لما يترك (change)
   dialog.addEventListener('input', e => {
     if (e.target.id !== 'bgBlur') return;
     $('#bgBlurV').textContent = e.target.value + 'px';
-    setLook(boardBgUrl(getBoard()), +e.target.value);
+    setLook(boardBgUrl(getBoard()), +e.target.value, (getBoard() || {}).bg_fit);
     lookKey = '';
   });
   $('#themeBtn').onclick = () => {

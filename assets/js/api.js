@@ -76,9 +76,10 @@ export async function saveSetting(key, value) {
 
 // البوردات اللي يشوفها المستخدم + أعضاءها. قبل ما تتشغل 012 الجدول ما موجود: S.BOARDS يبقى null
 export async function loadBoards() {
-  // قبل 013 أعمدة الخلفية ما موجودة: نرجع للاسم بس
-  let [b, m] = await Promise.all([sb.from('boards').select('id,name,bg,bg_custom,blur').order('id'), sb.from('board_members').select('board_id,user_id')]);
-  if (b.error) b = await sb.from('boards').select('id,name').order('id');
+  // الأعمدة الأحدث أول؛ إذا migration بعده ما انشغل نرجع خطوة (014 ← 013 ← 012)
+  const cols = ['id,name,bg,bg_custom,blur,bg_fit', 'id,name,bg,bg_custom,blur', 'id,name'];
+  let [b, m] = await Promise.all([sb.from('boards').select(cols[0]).order('id'), sb.from('board_members').select('board_id,user_id')]);
+  for (let i = 1; b.error && i < cols.length; i++) b = await sb.from('boards').select(cols[i]).order('id');
   S.boardsLoaded = true;
   if (b.error) { S.BOARDS = null; S.MEMBERS = []; S.board = null; return }
   S.BOARDS = b.data || []; S.MEMBERS = m.data || [];

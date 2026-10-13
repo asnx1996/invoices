@@ -141,7 +141,7 @@
   }
   db.invoices.forEach(i => { if (i.board_id == null) i.board_id = 1 });
   // 013: خلفية البورد ومستوى الإشعارات
-  db.boards.forEach(b => { if (b.blur == null) Object.assign(b, { bg: b.id === 2 ? 'nature' : null, bg_custom: null, blur: 0 }) });
+  db.boards.forEach(b => { if (b.blur == null) Object.assign(b, { bg: b.id === 2 ? 'nature' : null, bg_custom: null, blur: 0 }); if (!b.bg_fit) b.bg_fit = 'cover' });
   db.profiles.forEach(p => { if (p.notif_level == null) p.notif_level = 'all' });
   if (!db.invoice_notif_prefs) db.invoice_notif_prefs = [];
   const save = () => store.set(KEY, JSON.stringify({ ...db, files: {} }));
