@@ -1,5 +1,5 @@
 import { S, COLS, SUB, PAY, PAY_LEGACY, PAYER, PAYER_LEGACY, MONTHS, POINT_RATE, hasRole, getInv, userName, reps, isActive, isUrgent,
-  ldAmount, transportAdded, totalAfterTransport, pointsPct, onChange } from './state.js';
+  ldAmount, transportAdded, totalAfterTransport, pointsPct, onChange, NOTIF_LEVELS } from './state.js';
 import { renderBoard } from './board.js';
 import { $, esc, num, fmt, money, pct, dt, dOnly, ic, toast, ask, cur, rate, numAttrs, numVal } from './util.js';
 import { sb, rpc, refreshInvoice } from './api.js';
@@ -275,6 +275,9 @@ export function renderDrawer() {
       <h3>${esc(inv.customer) || 'طلب جديد'}</h3>
       <span class="badge" style="background:var(--surface-2);color:${col.c};border:1px solid var(--border)">${col.t}${inv.stage === 'decision' ? ' · ' + SUB[inv.sub] : ''}</span>
       ${isUrgent(inv) ? `<span class="badge b-urgent">${ic('flame')}طارئ</span>` : ''}
+      ${draft || S.ME.notif_level == null ? '' : `<label class="d-notif" title="شنو يوصلك من إشعارات هذا الطلب">${ic('bell')}<select id="invNotif" aria-label="إشعارات هذا الطلب">
+        <option value="">حسب إعدادي العام (${NOTIF_LEVELS[S.ME.notif_level] || ''})</option>
+        ${Object.entries(NOTIF_LEVELS).map(([k, t]) => `<option value="${k}" ${S.NPREFS[inv.id] === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>`}
     </div>
     <button class="icon-btn close" aria-label="إغلاق">${ic('x')}</button>
   </div>
@@ -464,6 +467,12 @@ export function initDrawer() {
   d.addEventListener('change', async e => {
     const el = e.target, inv = getInv(S.drawerId); if (!inv) return;
     if (el.id === 'pdfIn') { const f = el.files[0]; if (f) uploadPdf(inv, f); return }
+    if (el.id === 'invNotif') {
+      const v = el.value || null, { error } = await sb.rpc('set_invoice_notif', { p_id: inv.id, p_level: v });
+      if (error) return toast(error.message);
+      if (v) S.NPREFS[inv.id] = v; else delete S.NPREFS[inv.id];
+      return toast(v ? 'إشعارات هذا الطلب: ' + NOTIF_LEVELS[v] : 'هذا الطلب رجع لإعدادك العام');
+    }
 
     if (el.id === 'f_customer_pick') {
       const name = el.value.trim().toLowerCase();

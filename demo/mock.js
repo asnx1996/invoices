@@ -140,6 +140,10 @@
     db.invoices.filter(i => i.rep_id === 'u-rep2').forEach((i, k) => { if (k % 3 === 0) i.board_id = 2 });
   }
   db.invoices.forEach(i => { if (i.board_id == null) i.board_id = 1 });
+  // 013: خلفية البورد ومستوى الإشعارات
+  db.boards.forEach(b => { if (b.blur == null) Object.assign(b, { bg: b.id === 2 ? 'nature' : null, bg_custom: null, blur: 0 }) });
+  db.profiles.forEach(p => { if (p.notif_level == null) p.notif_level = 'all' });
+  if (!db.invoice_notif_prefs) db.invoice_notif_prefs = [];
   const save = () => store.set(KEY, JSON.stringify({ ...db, files: {} }));
   save();
 
@@ -158,6 +162,7 @@
     invoices: i => inBoard(i.board_id) && (has('admin') || has('mgr') || has('acc') || (has('wh') && ['decision', 'done'].includes(i.stage)) || (has('rep') && i.rep_id === session)),
     boards: b => inBoard(b.id),
     board_members: m => inBoard(m.board_id),
+    invoice_notif_prefs: r => r.user_id === session,
     invoice_costs: () => has('admin'),
     profiles: p => active() || p.id === session,
     customers: () => active(),
@@ -194,6 +199,12 @@
   };
   function notify(user_id, inv, kind, data) {
     if (!user_id || user_id === session || !canSeeAs(user_id, inv)) return;
+    // نفس فلتر 013: إعداد الطلب يغطي العام
+    const lvl = (db.invoice_notif_prefs.find(r => r.user_id === user_id && r.invoice_id === inv.id) || {}).level
+      || (db.profiles.find(p => p.id === user_id) || {}).notif_level || 'all';
+    const ord = { new: 1, acc: 2, decision: 3 };
+    const important = ['mention', 'turn', 'late'].includes(kind) || (kind === 'stage' && (['done', 'cancel'].includes(data.stage) || ord[data.stage] < ord[data.from_stage]));
+    if (lvl === 'none' || (lvl === 'mention' && kind !== 'mention') || (lvl === 'important' && !important)) return;
     db.notifications.push({ id: db.seq.notifications++, user_id, invoice_id: inv.id, kind, actor: session, data: { customer: inv.customer, ...data }, created_at: iso(Date.now()), read_at: null });
   }
   function stageLog(inv) { db.invoice_stage_log.push({ id: db.seq.invoice_stage_log++, invoice_id: inv.id, key: inv.stage === 'decision' ? 'decision:' + inv.sub : inv.stage, entered_at: iso(Date.now()) }) }
@@ -511,6 +522,24 @@
       ['invoice_comments', 'invoice_log', 'invoice_stage_log', 'invoice_costs', 'notifications'].forEach(t => db[t] = db[t].filter(r => r.invoice_id !== v.id));
       db.invoices = db.invoices.filter(r => r.id !== v.id);
       return path;
+    },
+    board_stats() {
+      const out = {};
+      db.invoices.filter(i => canRead.invoices(i) && isActiveStage(i.stage)).forEach(i => {
+        const r = out[i.board_id] = out[i.board_id] || { board_id: i.board_id, active: 0, late: 0 };
+        r.active++; if ((Date.now() - new Date(i.stage_at)) / DAY >= 3) r.late++;
+      });
+      return Object.values(out);
+    },
+    set_notif_level({ p_level }) {
+      if (!['all', 'important', 'mention', 'none'].includes(p_level)) throw new Error('مستوى غير معروف');
+      me().notif_level = p_level; return null;
+    },
+    set_invoice_notif({ p_id, p_level }) {
+      const v = getInvFor(p_id); if (!canRead.invoices(v)) throw new Error('الطلب غير موجود');
+      db.invoice_notif_prefs = db.invoice_notif_prefs.filter(r => !(r.user_id === session && r.invoice_id === v.id));
+      if (p_level) db.invoice_notif_prefs.push({ user_id: session, invoice_id: v.id, level: p_level });
+      return null;
     },
     inv_set_board({ p_id, p_board }) {
       if (!has('admin')) throw new Error('نقل الطلب لبورد ثاني للأدمن فقط');

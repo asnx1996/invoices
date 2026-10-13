@@ -566,6 +566,44 @@ begin
   perform pg_temp.as_user(u_mgr);
   perform pg_temp.t_eq('بورد: بعد النقل المدير يشوفه', format('select count(*) from public.invoices where id = %s', i_b2), '1');
 
+  -- ---------------- شكل البورد ومستوى الإشعارات (013) ----------------
+  perform pg_temp.as_user(u_mgr);
+  perform pg_temp.t_denied('خلفية: غير الأدمن ما يغيرها', 'update public.boards set blur = 5 where id = 1');
+  perform pg_temp.t_eq('عدد البوردات: المدير يشوف عدد طلبات بورده', 'select count(*) from public.board_stats() where board_id = 1', '1');
+  perform pg_temp.as_user(u_admin);
+  perform pg_temp.t_ok('خلفية: الأدمن يغيرها', $q$update public.boards set bg = 'ledger', blur = 8 where id = 1$q$, 1);
+  perform pg_temp.t_denied('خلفية: ضبابية أكثر من 30 ترفض', 'update public.boards set blur = 50 where id = 1');
+  perform pg_temp.t_denied('خلفية: رابط خارجي يرفض', $q$update public.boards set bg_custom = 'https://x.y/a.png' where id = 1$q$);
+
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_ok('إشعارات: المندوب يختار المنشن بس', $q$select public.set_notif_level('mention')$q$);
+  perform pg_temp.t_denied('إشعارات: مستوى غلط يرفض', $q$select public.set_notif_level('x')$q$);
+  perform pg_temp.as_owner();
+  delete from public.notifications where user_id = u_rep1;
+  insert into public.notifications (user_id, invoice_id, kind, data) values
+    (u_rep1, i_new3, 'stage', '{"stage":"acc","from_stage":"new"}'), (u_rep1, i_new3, 'comment', '{}'),
+    (u_rep1, i_new3, 'mention', '{}');
+  perform pg_temp.t_eq('إشعارات: المنشن بس يوصل', format('select string_agg(kind, %L) from public.notifications where user_id = %L', ',', u_rep1), 'mention');
+
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_ok('إشعارات: الكل لهذا الطلب', format($q$select public.set_invoice_notif(%s, 'all')$q$, i_new3));
+  perform pg_temp.t_denied('إشعارات: ما يغير لطلب ما يشوفه', $q$select public.set_invoice_notif(999999999, 'all')$q$);
+  perform pg_temp.as_owner();
+  insert into public.notifications (user_id, invoice_id, kind, data) values (u_rep1, i_new3, 'comment', '{}');
+  perform pg_temp.t_eq('إشعارات: إعداد الطلب يغطي العام', format($q$select count(*) from public.notifications where user_id = %L and kind = 'comment'$q$, u_rep1), '1');
+
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_ok('إشعارات: المهمة بس', $q$select public.set_notif_level('important')$q$);
+  perform pg_temp.t_ok('إشعارات: الطلب يرجع للعام', format('select public.set_invoice_notif(%s, null)', i_new3));
+  perform pg_temp.as_owner();
+  delete from public.notifications where user_id = u_rep1;
+  insert into public.notifications (user_id, invoice_id, kind, data) values
+    (u_rep1, i_new3, 'stage', '{"stage":"acc","from_stage":"new"}'), (u_rep1, i_new3, 'comment', '{}'),
+    (u_rep1, i_new3, 'stage', '{"stage":"new","from_stage":"acc"}'), (u_rep1, i_new3, 'stage', '{"stage":"done","from_stage":"decision"}'),
+    (u_rep1, i_new3, 'turn', '{}');
+  perform pg_temp.t_eq('إشعارات: المهمة = الإرجاع والاكتمال ودورك',
+    format($q$select string_agg(coalesce(data->>'stage', kind), ',' order by id) from public.notifications where user_id = %L$q$, u_rep1), 'new,done,turn');
+
   -- ---------------- النتيجة ----------------
   perform pg_temp.as_owner();
   msg := current_setting('tst.fail', true);

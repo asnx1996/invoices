@@ -9,6 +9,9 @@ export const S = {
   BOARDS: null,       // [{id, name}] — null = القاعدة قبل 012 (بورد واحد بدون اختيار)
   MEMBERS: [],        // [{board_id, user_id}] لبوردات المستخدم
   board: null,        // البورد المعروض
+  boardsLoaded: false,
+  STATS: {},          // board_id → {active, late} لصفحة البوردات
+  NPREFS: {},         // invoice_id → مستوى إشعاراتي لهذا الطلب (013)
   PROFITS: {},        // invoice_id → {total, gross_pct, net_pct}
   COSTS: {},          // للأدمن فقط: invoice_id → cost
   drawerId: null,
@@ -43,6 +46,8 @@ export const rolesText = roles => (roles || []).map(r => ROLES[r] || r).join(' +
 export const userName = id => (S.PROFILES.find(p => p.id === id) || {}).full_name || '—';
 // الأدمن بكل البوردات؛ الباقين حسب الأدمن يحددهم (012)
 export const inBoard = (p, b = S.board) => !S.BOARDS || (p.roles || []).includes('admin') || S.MEMBERS.some(m => m.board_id === b && m.user_id === p.id);
+export const getBoard = (id = S.board) => (S.BOARDS || []).find(b => b.id === id) || null;
+export const NOTIF_LEVELS = { all: 'كل الإشعارات', important: 'المهمة بس', mention: 'المنشن بس', none: 'بدون إشعارات' };
 export const boardName = id => ((S.BOARDS || []).find(b => b.id === id) || {}).name || '';
 export const reps = () => S.PROFILES.filter(p => p.active && (p.roles || []).includes('rep') && inBoard(p));
 // 'draft' = طلب جديد لسه ما انحفظ بالقاعدة (ما يطلع باللوحة لحد الحفظ)

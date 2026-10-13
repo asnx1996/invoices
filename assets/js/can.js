@@ -22,6 +22,7 @@ export function can(a, inv) {
     case 'complete': return inv.stage === 'decision' && inv.sub === 'wh' && (admin || mgr || wh);
     case 'toggleUrgent': return ['new', 'acc', 'decision'].includes(inv.stage) && (admin || mgr || (rep && own));
     case 'delete': return admin;
+    case 'home': return !!S.BOARDS && S.BOARDS.length > 1;
     case 'setBoard': return admin && !!S.BOARDS && S.BOARDS.length > 1;
     case 'requestDelete': return !admin && !inv.delete_req_at;
     case 'cancelDeleteReq': return !!inv.delete_req_at && (admin || inv.delete_req_by === S.ME.id);

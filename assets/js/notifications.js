@@ -1,6 +1,6 @@
 // لوحة الإشعارات (الجرس): تغيّر مرحلة طلبك، أو أحد ذكرك بـ @ بتعليق أو بالملاحظات.
 // الإشعارات تنكتب بالقاعدة (تريغرات 007) وتوصل مباشرة عبر Realtime.
-import { S, COLS, SUB, userName } from './state.js';
+import { S, COLS, SUB, userName, NOTIF_LEVELS } from './state.js';
 import { sb, findInvoice } from './api.js';
 import { $, esc, ic, toast } from './util.js';
 import { VAPID_PUBLIC_KEY } from './config.js';
@@ -67,6 +67,7 @@ function paintList() {
   const n = unread();
   $('#notifPop').innerHTML = `<div class="np-head"><h2>الإشعارات</h2>
       ${n ? `<button type="button" class="link-btn" data-np="all">تعليم الكل كمقروء</button>` : ''}</div>
+    ${levelHTML()}
     ${permHTML()}
     <ul class="np-list">${LIST.map(x => {
       const [icn, col] = kindIcon(x), d = x.data || {};
@@ -80,6 +81,15 @@ function paintList() {
 }
 
 const paint = () => { paintBadge(); paintList() };
+
+// شنو يوصلني (013). لكل طلب يتغير من درج الطلب
+const LEVEL_HELP = { all: 'كل تغيير وتعليق على طلباتك', important: 'المنشن، دورك، المتأخرة، والإرجاع والاكتمال والإلغاء', mention: 'بس لما أحد يذكرك بـ @', none: 'ولا إشعار (إلا اللي تفعّله لطلب معيّن)' };
+function levelHTML() {
+  if (!S.ME || S.ME.notif_level == null) return ''; // قبل 013
+  return `<div class="np-level"><label for="npLevel">${ic('bell')}يوصلني:</label>
+    <select id="npLevel">${Object.entries(NOTIF_LEVELS).map(([k, t]) => `<option value="${k}" ${k === S.ME.notif_level ? 'selected' : ''}>${t}</option>`).join('')}</select>
+    <span class="help">${LEVEL_HELP[S.ME.notif_level] || ''}</span></div>`;
+}
 
 // ---------- تنبيهات الموبايل/الكمبيوتر (Web Push) ----------
 const pushOK = () => !!VAPID_PUBLIC_KEY && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
@@ -185,6 +195,12 @@ export function initNotifs() {
     const it = e.target.closest('[data-nid]'); if (!it) return;
     const n = LIST.find(x => x.id === +it.dataset.nid); if (!n) return;
     setOpen(false); markRead([n.id]); openInv(n.invoice_id);
+  });
+  $('#notifPop').addEventListener('change', async e => {
+    if (e.target.id !== 'npLevel') return;
+    const v = e.target.value, { error } = await sb.rpc('set_notif_level', { p_level: v });
+    if (error) return toast(error.message);
+    S.ME.notif_level = v; paintList(); toast('صار يوصلك: ' + NOTIF_LEVELS[v]);
   });
   document.addEventListener('click', () => { if (open) setOpen(false) });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && open) { setOpen(false); $('#bellBtn').focus() } });

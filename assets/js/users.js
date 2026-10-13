@@ -46,7 +46,16 @@ function renderBoards() {
   }).join('')}</tbody>`;
 }
 
-async function refreshBoards() { await loadBoards(); changed(); renderUsers() }
+async function refreshBoards() { await loadBoards(); changed(); if (!$('#viewUsers').classList.contains('hidden')) renderUsers() }
+
+export function addBoard() {
+  ask('بورد جديد', [{ id: 'n', label: 'اسم البورد (مثل: المنطقة الجنوبية)', type: 'text', req: true }], async v => {
+    const { error } = await sb.from('boards').insert({ name: v.n.trim() });
+    if (error) return toast(/duplicate|unique/i.test(error.message) ? 'أكو بورد بنفس الاسم' : error.message);
+    toast('انسوى البورد. أشّر المستخدمين اللي يشوفوه من صفحة المستخدمين');
+    refreshBoards();
+  }, { okText: 'إنشاء' });
+}
 
 // يعرض بيانات الدخول مرة وحدة حتى الأدمن ينطيها للموظف
 function showCreds(title, login, pw) {
@@ -91,12 +100,7 @@ export function initUsers() {
   });
   $('#backupBtn').onclick = backupNow;
 
-  $('#addBoardBtn').onclick = () => ask('بورد جديد', [{ id: 'n', label: 'اسم البورد (مثل: المنطقة الجنوبية)', type: 'text', req: true }], async v => {
-    const { error } = await sb.from('boards').insert({ name: v.n.trim() });
-    if (error) return toast(/duplicate|unique/i.test(error.message) ? 'أكو بورد بنفس الاسم' : error.message);
-    toast('انسوى البورد. هسة أشّر المستخدمين اللي يشوفوه من جدول المستخدمين');
-    refreshBoards();
-  }, { okText: 'إنشاء' });
+  $('#addBoardBtn').onclick = addBoard;
   $('#boardsTbl').addEventListener('click', e => {
     const b = e.target.closest('[data-brename]'); if (!b) return;
     const id = +b.dataset.brename, cur = (S.BOARDS.find(x => x.id === id) || {}).name || '';

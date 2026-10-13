@@ -1,5 +1,5 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
-import { S, changed, hasRole } from './state.js';
+import { S, changed, hasRole, getBoard } from './state.js';
 import { toast, DAY, setCurrency, setRate } from './util.js';
 
 export const configured = /^https:\/\/.+\.supabase\.co$/.test(SUPABASE_URL) && SUPABASE_ANON_KEY.length > 40;
@@ -76,11 +76,34 @@ export async function saveSetting(key, value) {
 
 // البوردات اللي يشوفها المستخدم + أعضاءها. قبل ما تتشغل 012 الجدول ما موجود: S.BOARDS يبقى null
 export async function loadBoards() {
-  const [b, m] = await Promise.all([sb.from('boards').select('id,name').order('id'), sb.from('board_members').select('board_id,user_id')]);
+  // قبل 013 أعمدة الخلفية ما موجودة: نرجع للاسم بس
+  let [b, m] = await Promise.all([sb.from('boards').select('id,name,bg,bg_custom,blur').order('id'), sb.from('board_members').select('board_id,user_id')]);
+  if (b.error) b = await sb.from('boards').select('id,name').order('id');
+  S.boardsLoaded = true;
   if (b.error) { S.BOARDS = null; S.MEMBERS = []; S.board = null; return }
   S.BOARDS = b.data || []; S.MEMBERS = m.data || [];
+  loadBoardStats();
   let saved = null; try { saved = +localStorage.getItem('ib_board') } catch (e) { }
   S.board = (S.BOARDS.find(x => x.id === saved) || S.BOARDS[0] || {}).id ?? null;
+}
+
+export async function loadBoardStats() {
+  const { data, error } = await sb.rpc('board_stats');
+  S.STATS = error ? {} : Object.fromEntries((data || []).map(r => [r.board_id, r]));
+  changed();
+}
+
+// خلفية البورد وضبابيته (الأدمن)
+export async function saveBoardLook(id, patch) {
+  const { error } = await sb.from('boards').update(patch).eq('id', id);
+  if (error) { toast(error.message); return false }
+  Object.assign(getBoard(id) || {}, patch); changed();
+  return true;
+}
+
+export async function loadNotifPrefs() {
+  const { data, error } = await sb.from('invoice_notif_prefs').select('invoice_id,level');
+  S.NPREFS = error ? {} : Object.fromEntries((data || []).map(r => [r.invoice_id, r.level]));
 }
 
 export async function setBoard(id) {
@@ -91,7 +114,7 @@ export async function setBoard(id) {
 }
 
 export async function loadAll() {
-  await Promise.all([loadProfiles(), loadCustomers(), loadSettings(), loadBoards()]);
+  await Promise.all([loadProfiles(), loadCustomers(), loadSettings(), loadBoards(), loadNotifPrefs()]);
   await loadInvoices();
 }
 

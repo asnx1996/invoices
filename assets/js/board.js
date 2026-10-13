@@ -1,9 +1,10 @@
-import { S, COLS, SUB, MONTHS, getInv, userName, reps, isActive, isUrgent, ageLevel, daysIn, hasRole } from './state.js';
+import { S, COLS, SUB, MONTHS, getInv, userName, reps, isActive, isUrgent, ageLevel, daysIn, hasRole, getBoard } from './state.js';
 import { $, $$, esc, num, money, pct, ic, toast, ask } from './util.js';
 import { avatarHTML } from './avatars.js';
 import { can } from './can.js';
 import { run, waitingOn, moveTo } from './actions.js';
 import { openDrawer } from './drawer.js';
+import { searchSelect } from './ssel.js';
 
 // تفضيلات اللوحة تنحفظ بالجهاز (مو بالقاعدة): الأعمدة المطوية، ترتيب كل عمود، عرض التفاصيل
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch (e) { return d } };
@@ -70,19 +71,19 @@ function cardHTML(inv) {
   if (inv.stage === 'cancel' && inv.cancel_reason) b.push(`<span class="badge b-bad">${esc(inv.cancel_reason.slice(0, 30))}</span>`);
   const refs = [inv.quote_no && 'عرض ' + inv.quote_no, inv.res_no && 'حجز ' + inv.res_no].filter(Boolean).join(' · ') || 'بدون رقم';
   const rep = userName(inv.rep_id);
-  return `<article class="card${urgent ? ' urgent' : ''}${open ? ' open' : ''}" draggable="true" data-id="${inv.id}">
-    <div class="top"><span class="id">#${inv.id}</span><span class="top-av" title="${esc(rep)}">${avatarHTML(inv.rep_id, 22)}</span>
-      <button type="button" class="more-btn" aria-expanded="${open}" aria-controls="cx${inv.id}" aria-label="${open ? 'إخفاء' : 'عرض'} تفاصيل الطلب ${inv.id}">${ic('chev')}</button></div>
-    <button type="button" class="card-link cust">${esc(inv.customer) || '<span style="color:var(--faint)">(بدون اسم)</span>'}</button>
+  // الكرت: الزبون والمندوب فوك، القيمة بالوسط، وتحت الرقم والتنبيهات. التفاصيل تنفتح بالسهم
+  return `<article class="card${urgent ? ' urgent' : ''}${open ? ' open' : ''}${lvl === 2 ? ' late' : ''}" draggable="true" data-id="${inv.id}">
+    <div class="c-head"><button type="button" class="card-link cust">${esc(inv.customer) || '<span style="color:var(--faint)">(بدون اسم)</span>'}</button>
+      <span class="top-av" title="${esc(rep)}">${avatarHTML(inv.rep_id, 26)}</span></div>
     ${num(inv.value) ? `<div class="val">${money(inv.value)}</div>` : ''}
     ${alert.length ? `<div class="badges">${alert.join('')}</div>` : ''}
+    <div class="c-foot"><span class="id">#${inv.id}</span><span class="c-rep">${esc(rep)}</span>
+      ${inv.pdf_path ? '' : `<span class="c-nopdf" title="ما مرفوع PDF">${ic('clip')}</span>`}
+      <button type="button" class="more-btn" aria-expanded="${open}" aria-controls="cx${inv.id}" aria-label="${open ? 'إخفاء' : 'عرض'} تفاصيل الطلب ${inv.id}">${ic('chev')}</button></div>
     <div class="extra" id="cx${inv.id}" ${open ? '' : 'inert'}><div>
       <div class="refs">${esc(refs)}</div>
       ${b.length ? `<div class="badges">${b.join('')}</div>` : ''}
-      <div class="meta">
-        ${inv.pdf_path ? `<span>${ic('clip')}1</span>` : `<span style="color:var(--bad)">${ic('clip')}0</span>`}
-        <span class="rep">${esc(rep)}</span>
-      </div></div></div></article>`;
+    </div></div></article>`;
 }
 
 // هيكل رمادي مكان الكروت لحد ما توصل البيانات، بدل "لا توجد طلبات" الغلط
@@ -102,6 +103,7 @@ export function renderBoard() {
     $('#board').innerHTML = COLS.map((c, i) => `<section class="column"><div class="col-head"><span class="dot" style="background:${c.c}"></span><h2>${c.t}</h2></div>
       <div class="col-body">${skel([3, 2, 2, 1, 1][i])}</div></section>`).join('');
     $('#stats').innerHTML = '<div class="stat skel" aria-hidden="true"><i></i><i></i></div>'.repeat(3);
+    $('#boardTitle').textContent = (getBoard() || {}).name || '';
     return;
   }
   // إعادة الرسم تمسح العناصر، فنرجع التركيز لنفس الزر/القائمة
@@ -137,13 +139,16 @@ function renderStats(list) {
   const late = lateOnly ? act.length : act.filter(i => ageLevel(i) === 2).length;
   const tiles = [
     ['قيد العمل', act.length, money(act.reduce((s, i) => s + num(i.value), 0))],
-    ['متأخرة (3 أيام+)', late, lateOnly ? 'اضغط لإلغاء الفلتر' : 'بنفس المرحلة · اضغط للعرض', 'late'],
+    ['متأخرة', late, lateOnly ? 'اضغط لإلغاء الفلتر' : '3 أيام+ · اضغط للعرض', 'late'],
     ['مكتملة', doneL.length, money(doneL.reduce((s, i) => s + num(i.value), 0))],
   ];
   $('#stats').innerHTML = tiles.map(s => {
     const inner = `<span class="k">${s[0]}</span><span class="v">${s[1]}</span><span class="s">${s[2]}</span>`;
-    return s[3] ? `<button type="button" class="stat click" data-stat="${s[3]}" aria-pressed="${lateOnly}">${inner}</button>` : `<div class="stat">${inner}</div>`;
+    return s[3] ? `<button type="button" class="stat click${late && !lateOnly ? ' warn' : ''}" data-stat="${s[3]}" aria-pressed="${lateOnly}">${inner}</button>` : `<div class="stat">${inner}</div>`;
   }).join('');
+  const b = getBoard();
+  $('#boardTitle').textContent = b ? b.name : '';
+  $('#boardTitle').classList.toggle('hidden', !b);
 }
 
 export function fillFilters() {
@@ -161,6 +166,8 @@ export function fillFilters() {
 const syncExpandBtn = () => $('#expandAll').setAttribute('aria-pressed', String(allOpen));
 
 export function initBoard() {
+  searchSelect($('#fRep'), 'ابحث عن مندوب...');
+  searchSelect($('#fStage'), 'ابحث عن حالة...');
   ['#q', '#fRep', '#fStage'].forEach(s => $(s).addEventListener('input', renderBoard));
   $('#stats').addEventListener('click', e => {
     if (!e.target.closest('[data-stat="late"]')) return;

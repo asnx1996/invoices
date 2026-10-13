@@ -5,18 +5,20 @@ import { $, $$, toast, esc } from './util.js';
 import { initAuth } from './auth.js';
 import { initBoard, renderBoard, fillFilters } from './board.js';
 import { initDrawer, openDrawer, hideDrawer, openDraft } from './drawer.js';
-import { initUsers, renderUsers } from './users.js';
+import { initUsers, renderUsers, addBoard } from './users.js';
 import { initCustomers, renderCustomers } from './customers.js';
 import { initReports, renderReports } from './reports.js';
 import { initExport } from './export.js';
 import { initNotifs } from './notifications.js';
 import { initMentions } from './mentions.js';
 import { openAvatarPicker } from './avatars.js';
-import { initAppearance } from './appearance.js';
+import { initAppearance, applyLook } from './appearance.js';
+import { initHome, renderHome, refreshHome } from './home.js';
 
-const VIEWS = { board: '#viewBoard', customers: '#viewCustomers', reports: '#viewReports', users: '#viewUsers' };
+const VIEWS = { home: '#viewHome', board: '#viewBoard', customers: '#viewCustomers', reports: '#viewReports', users: '#viewUsers' };
 let view = 'board';
 let pendingInv = null; // رابط طلب (#inv-12) ينفتح بعد ما تتحمل البيانات
+let startHome = false; // فتح التطبيق بدون رابط: صفحة البوردات أول (إذا عنده أكثر من بورد)
 
 // كل قسم إله رابط (#reports) حتى زر الرجوع بالموبايل والمتصفح يشتغل صح
 const urlFor = v => v === 'board' ? location.pathname + location.search : '#' + v;
@@ -32,6 +34,9 @@ function show(v, push = true) {
   if (v === 'users') renderUsers();
   if (v === 'customers') renderCustomers();
   if (v === 'reports') renderReports();
+  if (v === 'home') { renderHome(); refreshHome() }
+  $('#boardSel').classList.toggle('on-home', v === 'home');
+  applyLook();
 }
 
 // بعد تسجيل الدخول: نظهر/نخفي حسب الصلاحيات
@@ -45,6 +50,7 @@ function onReady() {
   const m = location.hash.match(/^#inv-(\d+)$/);
   pendingInv = m ? +m[1] : null;
   const v = m ? 'board' : location.hash.slice(1) || 'board';
+  startHome = !location.hash || location.hash === '#home';
   show(v, false);
   history.replaceState({ v: view }, '', urlFor(view));
   fillFilters(); renderBoard();
@@ -63,6 +69,12 @@ onChange(() => {
   fillFilters(); renderBoard();
   if (view === 'customers') renderCustomers();
   fillBoards();
+  if (startHome && S.boardsLoaded) {
+    startHome = false;
+    if (can('home') && view === 'board') { show('home', false); history.replaceState({ v: view }, '', urlFor(view)) }
+  }
+  if (view === 'home') renderHome();
+  applyLook();
   if (pendingInv && S.loaded) {
     const id = pendingInv; pendingInv = null;
     findInvoice(id).then(ok => ok ? openDrawer(id) : toast('الطلب #' + id + ' مو موجود أو ما عندك صلاحية تشوفه'));
@@ -76,6 +88,7 @@ function fillBoards() {
   if (sel.dataset.html !== html) { sel.innerHTML = html; sel.dataset.html = html }
   if (S.board) sel.value = String(S.board);
   sel.classList.toggle('hidden', list.length < 2);
+  $('#tabHome').classList.toggle('hidden', !can('home'));
   $('#noBoard').classList.toggle('hidden', !(S.BOARDS && !S.BOARDS.length));
 }
 $('#boardSel').addEventListener('change', async e => {
@@ -84,6 +97,7 @@ $('#boardSel').addEventListener('change', async e => {
 });
 
 $$('.tab').forEach(t => t.onclick = () => show(t.dataset.view));
+initHome(async id => { show('board'); await setBoard(id) }, addBoard);
 $('#fRange').addEventListener('change', e => setRange(+e.target.value));
 
 $('#newBtn').onclick = () => {

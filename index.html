@@ -72,6 +72,7 @@
     <h1 class="brand"><img class="brand-image" src="assets/brand/atlasplast-logo.png" alt="Atlasplast" width="344" height="200"><span>فواتير المبيعات</span></h1>
     <select id="boardSel" class="board-sel hidden" aria-label="البورد" title="البورد"></select>
     <nav class="tabs" aria-label="الأقسام">
+      <button class="tab hidden" data-view="home" id="tabHome">البوردات</button>
       <button class="tab" data-view="board" aria-current="page">اللوحة</button>
       <button class="tab hidden" data-view="reports" id="tabReports">التقارير</button>
       <button class="tab hidden" data-view="customers" id="tabCustomers">الزبائن</button>
@@ -102,9 +103,17 @@
   </div>
 </header>
 
+<main tabindex="-1" id="viewHome" class="hidden">
+  <div class="home">
+    <h2 class="home-title">البوردات</h2>
+    <p class="help home-sub">اختار البورد اللي تريد تشتغل عليه</p>
+    <div class="home-grid" id="homeGrid"></div>
+  </div>
+</main>
+
 <main tabindex="-1" id="viewBoard">
   <div class="cfg-warn hidden" id="noBoard">ما عندك بورد بعد. راجع الأدمن حتى يضيفك على بورد.</div>
-  <div class="stats" id="stats"></div>
+  <div class="board-head"><h2 class="board-title" id="boardTitle"></h2><div class="stats" id="stats"></div></div>
   <div class="board-wrap"><div class="board" id="board"></div></div>
 </main>
 
