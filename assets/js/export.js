@@ -22,6 +22,7 @@ async function exportXlsx(v) {
   try {
     rows = await fetchAll(() => {
       let q = sb.from('invoices').select('*').order('id');
+      if (S.board) q = q.eq('board_id', S.board);
       if (v.from) q = q.gte('created_at', new Date(v.from + 'T00:00').toISOString());
       if (v.to) q = q.lt('created_at', new Date(new Date(v.to + 'T00:00').getTime() + DAY).toISOString());
       if (v.rep !== 'all') q = q.eq('rep_id', v.rep);

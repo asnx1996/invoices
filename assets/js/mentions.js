@@ -1,13 +1,13 @@
 // المنشن: تكتب @ بالتعليق أو الملاحظات وتطلع قائمة الأشخاص اللي يكدرون يشوفون الطلب.
 // الاختيار يكتب "@الاسم الكامل " والقاعدة (007) تطلع منه الإشعار.
-import { S, getInv, rolesText } from './state.js';
+import { S, getInv, rolesText, inBoard } from './state.js';
 import { esc } from './util.js';
 import { avatarHTML } from './avatars.js';
 
 // نفس منطق invoices_read: منو يكدر يشوف الطلب
 export function canSee(p, inv) {
   const r = p.roles || [];
-  if (!p.active || !inv) return false;
+  if (!p.active || !inv || !inBoard(p, inv.board_id ?? S.board)) return false;
   return r.includes('admin') || r.includes('mgr') || r.includes('acc')
     || (r.includes('wh') && ['decision', 'done'].includes(inv.stage))
     || (r.includes('rep') && inv.rep_id === p.id);

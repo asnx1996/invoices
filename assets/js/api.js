@@ -24,6 +24,7 @@ export async function fetchAll(build, size = 1000) {
 
 const invoiceQuery = () => {
   let q = sb.from('invoices').select('*').order('stage_at', { ascending: true });
+  if (S.board) q = q.eq('board_id', S.board);
   if (rangeDays > 0) q = q.or(`stage.in.(new,acc,decision),closed_at.gte.${new Date(Date.now() - rangeDays * DAY).toISOString()}`);
   return q;
 };
@@ -73,19 +74,48 @@ export async function saveSetting(key, value) {
   return true;
 }
 
+// البوردات اللي يشوفها المستخدم + أعضاءها. قبل ما تتشغل 012 الجدول ما موجود: S.BOARDS يبقى null
+export async function loadBoards() {
+  const [b, m] = await Promise.all([sb.from('boards').select('id,name').order('id'), sb.from('board_members').select('board_id,user_id')]);
+  if (b.error) { S.BOARDS = null; S.MEMBERS = []; S.board = null; return }
+  S.BOARDS = b.data || []; S.MEMBERS = m.data || [];
+  let saved = null; try { saved = +localStorage.getItem('ib_board') } catch (e) { }
+  S.board = (S.BOARDS.find(x => x.id === saved) || S.BOARDS[0] || {}).id ?? null;
+}
+
+export async function setBoard(id) {
+  if (id === S.board) return;
+  S.board = id; try { localStorage.setItem('ib_board', id) } catch (e) { }
+  S.INVOICES = []; S.loaded = false; changed();
+  await loadInvoices();
+}
+
 export async function loadAll() {
-  await Promise.all([loadProfiles(), loadCustomers(), loadSettings()]);
+  await Promise.all([loadProfiles(), loadCustomers(), loadSettings(), loadBoards()]);
   await loadInvoices();
 }
 
 // طلب واحد تغيّر: نجيبه وحده بدل ما نعيد تحميل كلشي
 export async function refreshInvoice(id) {
-  const { data } = await sb.from('invoices').select('*').eq('id', id).maybeSingle();
+  let { data } = await sb.from('invoices').select('*').eq('id', id).maybeSingle();
+  if (data && S.board && data.board_id !== S.board) data = null;  // انتقل لبورد ثاني
   const i = S.INVOICES.findIndex(x => x.id === id);
   if (data) { if (i >= 0) S.INVOICES[i] = data; else S.INVOICES.push(data) }
   else if (i >= 0) S.INVOICES.splice(i, 1);
   if (data) await loadProfits([id]);
   changed();
+}
+
+// طلب من إشعار أو رابط: إذا ببورد ثاني نحول له أول. يرجّع true إذا صار موجود
+export async function findInvoice(id) {
+  if (S.INVOICES.some(x => x.id === id)) return true;
+  if (S.BOARDS) {
+    const { data } = await sb.from('invoices').select('board_id').eq('id', id).maybeSingle();
+    if (!data) return false;
+    if (data.board_id !== S.board) await setBoard(data.board_id);
+  }
+  if (!S.INVOICES.some(x => x.id === id)) await refreshInvoice(id); // ممكن طلب مغلق قديم مو ضمن الفترة المحمّلة
+  return S.INVOICES.some(x => x.id === id);
 }
 
 let chan = null;

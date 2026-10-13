@@ -131,6 +131,15 @@
   let db;
   try { db = JSON.parse(store.get(KEY)) } catch (e) { db = null }
   if (!db || !db.invoices || !db.notifications || !db.v2) db = seed();
+  // البوردات (012): الوسطى + الجنوبية. سارة بالاثنين، وكل طلب رابع إلها يروح للجنوبية
+  if (!db.boards) {
+    db.boards = [{ id: 1, name: 'المنطقة الوسطى' }, { id: 2, name: 'المنطقة الجنوبية' }];
+    db.seq.boards = 2;
+    db.board_members = db.profiles.filter(p => !p.roles.includes('admin')).map(p => ({ board_id: 1, user_id: p.id }));
+    db.board_members.push({ board_id: 2, user_id: 'u-rep2' });
+    db.invoices.filter(i => i.rep_id === 'u-rep2').forEach((i, k) => { if (k % 3 === 0) i.board_id = 2 });
+  }
+  db.invoices.forEach(i => { if (i.board_id == null) i.board_id = 1 });
   const save = () => store.set(KEY, JSON.stringify({ ...db, files: {} }));
   save();
 
@@ -141,10 +150,14 @@
   const has = r => { const u = me(); return !!u && u.active && u.roles.includes(r) };
   const active = () => { const u = me(); return !!u && u.active };
   const err = (message, code) => ({ data: null, error: { message, code } });
+  const boardsOf = uid => { const p = db.profiles.find(x => x.id === uid); return !p || !p.active ? [] : p.roles.includes('admin') ? db.boards.map(b => b.id) : db.board_members.filter(m => m.user_id === uid).map(m => m.board_id) };
+  const inBoard = b => boardsOf(session).includes(b);
 
   // ---------- الصلاحيات (نفس policies بالقاعدة) ----------
   const canRead = {
-    invoices: i => has('admin') || has('mgr') || has('acc') || (has('wh') && ['decision', 'done'].includes(i.stage)) || (has('rep') && i.rep_id === session),
+    invoices: i => inBoard(i.board_id) && (has('admin') || has('mgr') || has('acc') || (has('wh') && ['decision', 'done'].includes(i.stage)) || (has('rep') && i.rep_id === session)),
+    boards: b => inBoard(b.id),
+    board_members: m => inBoard(m.board_id),
     invoice_costs: () => has('admin'),
     profiles: p => active() || p.id === session,
     customers: () => active(),
@@ -160,7 +173,7 @@
   function addLog(id, body) { db.invoice_log.push({ id: db.seq.invoice_log++, invoice_id: id, actor: session, body, at: iso(Date.now()) }) }
   // ---------- الإشعارات (نفس تريغرات 007) ----------
   const canSeeAs = (uid, i) => {
-    const p = db.profiles.find(x => x.id === uid); if (!p || !p.active) return false; const r = p.roles;
+    const p = db.profiles.find(x => x.id === uid); if (!p || !p.active || !boardsOf(uid).includes(i.board_id)) return false; const r = p.roles;
     return r.includes('admin') || r.includes('mgr') || r.includes('acc') || (r.includes('wh') && ['decision', 'done'].includes(i.stage)) || (r.includes('rep') && i.rep_id === uid);
   };
   function mentioned(text) {
@@ -264,13 +277,16 @@
     run() {
       if (!session) return err('JWT expired', '401');
       const t = this.t;
+      // جدول مو موجود بالعرض (مثل boards): نفس خطأ القاعدة، والواجهة ترجع لبورد واحد
+      if (!db[t]) return err(`relation "public.${t}" does not exist`, '42P01');
       if (this.op === 'select') return this.finish(this.rows());
       if (this.op === 'insert') {
         const rows = Array.isArray(this.payload) ? this.payload : [this.payload], out = [];
         for (const r0 of rows) {
           const r = { ...r0 };
           if (t === 'invoices') {
-            if (!(has('admin') || (has('rep') && r.rep_id === session))) return err('new row violates row-level security policy for table "invoices"', '42501');
+            if (r.board_id == null) r.board_id = 1;
+            if (!inBoard(r.board_id) || !(has('admin') || (has('rep') && r.rep_id === session))) return err('new row violates row-level security policy for table "invoices"', '42501');
             const c = db.customers.find(x => x.id === r.customer_id);
             Object.assign(r, { id: ++db.seq.invoices, created_by: session, stage: 'new', sub: null, customer: c ? c.name : r.customer || '', points: 0, ld: false, cost_set: false, returned: 0,
               created_at: iso(Date.now()), stage_at: iso(Date.now()), closed_at: null, pdf_path: null, delete_req_at: null });
@@ -280,6 +296,14 @@
             if (db.customers.some(c => c.name.trim().toLowerCase() === String(r.name).trim().toLowerCase())) return err('duplicate key value', '23505');
             Object.assign(r, { id: ++db.seq.customers, active: true, created_at: iso(Date.now()), phone: r.phone || '', notes: r.notes || '' });
             db.customers.push(r);
+          } else if (t === 'boards') {
+            if (!has('admin')) return err('ما عندك صلاحية', '42501');
+            if (db.boards.some(b => b.name.trim() === String(r.name).trim())) return err('duplicate key value violates unique constraint', '23505');
+            Object.assign(r, { id: ++db.seq.boards, name: String(r.name).trim() });
+            db.boards.push(r);
+          } else if (t === 'board_members') {
+            if (!has('admin')) return err('ما عندك صلاحية', '42501');
+            if (!db.board_members.some(m => m.board_id === r.board_id && m.user_id === r.user_id)) db.board_members.push(r);
           } else if (t === 'invoice_comments') {
             const inv = db.invoices.find(x => x.id === r.invoice_id);
             if (!inv || !canRead.invoices(inv)) return err('ما عندك صلاحية', '42501');
@@ -304,7 +328,11 @@
         const list = this.rows();
         for (const r of list) {
           if (t === 'invoices') { const e = updateInvoice(r, { ...this.payload }); if (e) return err(e, '42501') }
-          else if (t === 'customers') { if (!has('admin')) return err('ما عندك صلاحية', '42501'); Object.assign(r, this.payload) }
+          else if (t === 'customers' || t === 'boards') {
+            if (!has('admin')) return err('ما عندك صلاحية', '42501');
+            if (t === 'boards' && db.boards.some(b => b !== r && b.name.trim() === String(this.payload.name).trim())) return err('duplicate key value violates unique constraint', '23505');
+            Object.assign(r, this.payload);
+          }
           else if (t === 'notifications') { if (Object.keys(this.payload).some(k => k !== 'read_at')) return err('permission denied for table notifications', '42501'); Object.assign(r, this.payload) }
           else if (t === 'profiles') {
             if (!has('admin')) return err('ما عندك صلاحية', '42501');
@@ -316,9 +344,9 @@
       }
       if (this.op === 'delete') {
         if (!has('admin')) return err('ما عندك صلاحية', '42501');
-        const ids = new Set(this.rows().map(r => r.id));
+        const gone = new Set(this.rows()), ids = new Set([...gone].map(r => r.id));
         if (t === 'customers' && db.invoices.some(i => ids.has(i.customer_id))) return err('الزبون مربوط بطلبات');
-        db[t] = db[t].filter(r => !ids.has(r.id));
+        db[t] = db[t].filter(r => !gone.has(r));
         save(); return { data: null, error: null };
       }
       return err('عملية غير مدعومة بالنسخة التجريبية');
@@ -330,6 +358,7 @@
     if (!active()) throw new Error('الحساب غير مفعّل');
     const v = db.invoices.find(x => x.id === +id);
     if (!v) throw new Error('الطلب غير موجود');
+    if (!inBoard(v.board_id)) throw new Error('الطلب مو ضمن بورداتك');
     return v;
   }
   const blank = s => String(s ?? '').trim() === '';
@@ -483,15 +512,24 @@
       db.invoices = db.invoices.filter(r => r.id !== v.id);
       return path;
     },
+    inv_set_board({ p_id, p_board }) {
+      if (!has('admin')) throw new Error('نقل الطلب لبورد ثاني للأدمن فقط');
+      const b = db.boards.find(x => x.id === +p_board); if (!b) throw new Error('البورد غير موجود');
+      const v = getInvFor(p_id);
+      if (v.board_id !== b.id) { v.board_id = b.id; addLog(v.id, 'نقل الطلب لبورد ' + b.name) }
+      return clone(v);
+    },
     inv_profits({ p_ids }) {
       const ids = p_ids ? new Set(p_ids.map(Number)) : null;
-      return profitRows().filter(p => (!ids || ids.has(p.invoice_id)) && (has('admin') || (has('mgr') && ['decision', 'done', 'cancel'].includes(p.stage))))
+      const vis = new Set(db.invoices.filter(i => inBoard(i.board_id)).map(i => i.id));
+      return profitRows().filter(p => (!ids || ids.has(p.invoice_id)) && vis.has(p.invoice_id) && (has('admin') || (has('mgr') && ['decision', 'done', 'cancel'].includes(p.stage))))
         .map(({ stage, ...p }) => p);
     },
-    report_summary({ p_from, p_to }) {
+    report_summary({ p_from, p_to, p_board = 1 }) {
       if (!(has('admin') || has('mgr'))) throw new Error('التقارير للأدمن والمدير');
+      if (!inBoard(+p_board)) throw new Error('ما عندك صلاحية على هذا البورد');
       const from = new Date(p_from + 'T00:00').getTime(), to = new Date(p_to + 'T00:00').getTime() + DAY;
-      const list = db.invoices.filter(i => { const t = new Date(i.created_at).getTime(); return t >= from && t < to });
+      const list = db.invoices.filter(i => { if (i.board_id !== +p_board) return false; const t = new Date(i.created_at).getTime(); return t >= from && t < to });
       const P = Object.fromEntries(profitRows().map(p => [p.invoice_id, p]));
       const avg = a => a.length ? round2(a.reduce((s, x) => s + x, 0) / a.length) : null;
       const cyc = i => (new Date(i.closed_at) - new Date(i.created_at)) / DAY;
@@ -543,7 +581,7 @@
       if (!has('admin')) throw new Error('للأدمن فقط');
       return db.profiles.map(p => ({ id: p.id, login: db.logins[p.id] || '' }));
     },
-    admin_create_user({ p_username, p_password, p_full_name, p_roles }) {
+    admin_create_user({ p_username, p_password, p_full_name, p_roles, p_boards }) {
       if (!has('admin')) throw new Error('للأدمن فقط');
       if (!/^[a-z0-9._-]{3,}$/.test(p_username || '')) throw new Error('اسم المستخدم: أحرف إنجليزية صغيرة وأرقام فقط (3 أو أكثر)');
       if (Object.values(db.logins).includes(p_username)) throw new Error('اسم المستخدم موجود');
@@ -551,7 +589,9 @@
       if (!p_roles || !p_roles.length) throw new Error('لازم دور واحد على الأقل');
       const id = 'u-' + Math.random().toString(36).slice(2, 9);
       db.profiles.push({ id, full_name: p_full_name, roles: p_roles, role: p_roles[0], active: true, created_at: iso(Date.now()) });
-      db.logins[id] = p_username; return id;
+      db.logins[id] = p_username;
+      (p_boards && p_boards.length ? p_boards : [1]).forEach(b => { if (db.boards.some(x => x.id === +b)) db.board_members.push({ board_id: +b, user_id: id }) });
+      return id;
     },
     admin_set_password({ p_password }) {
       if (!has('admin')) throw new Error('للأدمن فقط');

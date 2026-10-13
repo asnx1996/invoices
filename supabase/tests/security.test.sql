@@ -98,6 +98,7 @@ declare
   u_off    uuid := 'aaaaaaaa-0000-4000-8000-000000000007';
   u_repacc uuid := 'aaaaaaaa-0000-4000-8000-000000000008';
   c1 bigint; c2 bigint;
+  b2 bigint; i_b2 bigint;
   i_new1 bigint; i_new2 bigint; i_new3 bigint; i_acc bigint; i_acc2 bigint; i_dec bigint; i_wh bigint;
   new_user uuid;
   msg text;
@@ -118,6 +119,9 @@ begin
                  (u_repacc, 'repacc', '{rep,acc}')) x(id, n, r)
    where p.id = x.id;
   update public.profiles set roles = '{mgr}', active = false where id = u_off;
+  -- كلهم بالبورد الأول (الأدمن يشوف كل البوردات بدون عضوية)
+  insert into public.board_members (board_id, user_id)
+  select 1, x from unnest(array[u_rep1, u_rep2, u_acc, u_mgr, u_wh, u_off, u_repacc]) x on conflict do nothing;
 
   insert into public.customers (name) values ('zz-test زبون 1') returning id into c1;
   insert into public.customers (name) values ('zz-test زبون 2') returning id into c2;
@@ -509,6 +513,58 @@ begin
   perform pg_temp.as_user(u_admin);
   perform pg_temp.t_ok('تعليق: الأدمن يحذف تعليق نظام',
     format($q$select public.comment_delete((select max(id) from public.invoice_comments where invoice_id = %s and is_system))$q$, i_new3));
+
+  -- ---------------- البوردات (العزل) ----------------
+  perform pg_temp.as_owner();
+  insert into public.boards (name) values ('zz-test بورد الجنوب') returning id into b2;
+  insert into public.board_members (board_id, user_id) values (b2, u_rep2);
+  insert into public.invoices (board_id, rep_id, customer_id, quote_no, value, pdf_path, stage, sub, payment, payer)
+    values (b2, u_rep2, c2, 'B2', 100, 'p', 'decision', 'mgr', 'cash', 'company') returning id into i_b2;
+  insert into public.invoice_costs (invoice_id, cost) values (i_b2, 50);
+
+  perform pg_temp.as_user(u_mgr);
+  perform pg_temp.t_eq('بورد: المدير ما يشوف طلب بورد ثاني', format('select count(*) from public.invoices where id = %s', i_b2), '0');
+  perform pg_temp.t_denied('بورد: المدير ما يوافق على طلب بورد ثاني', format('select public.inv_approve(%s)', i_b2));
+  perform pg_temp.t_denied('بورد: المدير ما ينقل طلب بورد ثاني', format($q$select public.inv_move(%s, 'acc')$q$, i_b2));
+  perform pg_temp.t_eq('بورد: المدير ما يشوف ربح بورد ثاني', format('select count(*) from public.inv_profits(array[%s]::bigint[])', i_b2), '0');
+  perform pg_temp.t_denied('بورد: المدير ما يشوف تقرير بورد ثاني', format('select public.report_summary(current_date - 30, current_date, %s)', b2));
+  perform pg_temp.t_eq('بورد: المدير يشوف بورده بس', 'select count(*) from public.boards', '1');
+  perform pg_temp.t_denied('بورد: المدير ما يعلق على طلب بورد ثاني',
+    format($q$insert into public.invoice_comments (invoice_id, body) values (%s, 'x')$q$, i_b2));
+  perform pg_temp.t_denied('بورد: المدير ما يطلب حذف طلب بورد ثاني', format($q$select public.inv_request_delete(%s, 'x')$q$, i_b2));
+  perform pg_temp.t_denied('بورد: غير الأدمن ما يضيف بورد', $q$insert into public.boards (name) values ('zz-hack')$q$);
+  perform pg_temp.t_denied('بورد: غير الأدمن ما يضيف نفسه لبورد', format($q$insert into public.board_members values (%s, %L)$q$, b2, u_mgr));
+
+  perform pg_temp.as_user(u_acc);
+  perform pg_temp.t_denied('بورد: المحاسب ما يحط كلفة لطلب بورد ثاني', format('select public.inv_set_cost(%s, 10)', i_b2));
+  perform pg_temp.t_eq('بورد: المحاسب ما يشوف طلب بورد ثاني', format('select count(*) from public.invoices where id = %s', i_b2), '0');
+
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_denied('بورد: المندوب ما ينشئ طلب ببورد مو إله',
+    format($q$insert into public.invoices (board_id, rep_id, customer, quote_no) values (%s, %L, 'x', 'q')$q$, b2, u_rep1));
+
+  perform pg_temp.as_user(u_rep2);
+  perform pg_temp.t_eq('بورد: مندوب البورد يشوف طلبه', format('select count(*) from public.invoices where id = %s', i_b2), '1');
+  perform pg_temp.t_eq('بورد: يشوف البوردين', 'select count(*) from public.boards', '2');
+  perform pg_temp.t_ok('بورد: مندوب البورد ينشئ طلب بيه',
+    format($q$insert into public.invoices (board_id, rep_id, customer, quote_no) values (%s, %L, 'x', 'q')$q$, b2, u_rep2), 1);
+  perform pg_temp.t_denied('بورد: المندوب ما ينقل طلبه لبورد ثاني', format('select public.inv_set_board(%s, 1)', i_b2));
+
+  perform pg_temp.as_owner();
+  perform pg_temp.t_eq('بورد: إشعار المدير ما يوصل لغير بورده',
+    format('select public.user_can_see_invoice(%L, %s)::text', u_mgr, i_b2), 'false');
+  perform pg_temp.t_eq('بورد: إشعار مندوب البورد يوصل',
+    format('select public.user_can_see_invoice(%L, %s)::text', u_rep2, i_b2), 'true');
+
+  perform pg_temp.as_user(u_admin);
+  perform pg_temp.t_eq('بورد: الأدمن يشوف كل البوردات', format('select count(*) from public.invoices where id = %s', i_b2), '1');
+  perform pg_temp.t_denied('بورد: الأدمن ما يغير البورد مباشرة', format('update public.invoices set board_id = 1 where id = %s', i_b2));
+  perform pg_temp.t_ok('بورد: الأدمن ينقل الطلب', format('select public.inv_set_board(%s, 1)', i_b2));
+  perform pg_temp.t_ok('بورد: الأدمن يسوي مستخدم ببورد', format($q$select public.admin_create_user('zz.board.user', 'password123', 'zz بورد', '{mgr}', array[%s]::bigint[])$q$, b2));
+  perform pg_temp.t_eq('بورد: المستخدم الجديد بالبورد المختار',
+    format($q$select string_agg(m.board_id::text, ',') from public.board_members m join public.profiles p on p.id = m.user_id where p.full_name = 'zz بورد'$q$), b2::text);
+  perform pg_temp.as_user(u_mgr);
+  perform pg_temp.t_eq('بورد: بعد النقل المدير يشوفه', format('select count(*) from public.invoices where id = %s', i_b2), '1');
 
   -- ---------------- النتيجة ----------------
   perform pg_temp.as_owner();

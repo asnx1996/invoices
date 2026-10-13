@@ -6,6 +6,9 @@ export const S = {
   PROFILES: [],
   INVOICES: [],
   CUSTOMERS: [],
+  BOARDS: null,       // [{id, name}] — null = القاعدة قبل 012 (بورد واحد بدون اختيار)
+  MEMBERS: [],        // [{board_id, user_id}] لبوردات المستخدم
+  board: null,        // البورد المعروض
   PROFITS: {},        // invoice_id → {total, gross_pct, net_pct}
   COSTS: {},          // للأدمن فقط: invoice_id → cost
   drawerId: null,
@@ -38,7 +41,10 @@ export const POINT_RATE = 1.5;   // كل نقطة = 1.5%
 export const hasRole = r => !!S.ME && S.ME.roles.includes(r);
 export const rolesText = roles => (roles || []).map(r => ROLES[r] || r).join(' + ');
 export const userName = id => (S.PROFILES.find(p => p.id === id) || {}).full_name || '—';
-export const reps = () => S.PROFILES.filter(p => p.active && (p.roles || []).includes('rep'));
+// الأدمن بكل البوردات؛ الباقين حسب الأدمن يحددهم (012)
+export const inBoard = (p, b = S.board) => !S.BOARDS || (p.roles || []).includes('admin') || S.MEMBERS.some(m => m.board_id === b && m.user_id === p.id);
+export const boardName = id => ((S.BOARDS || []).find(b => b.id === id) || {}).name || '';
+export const reps = () => S.PROFILES.filter(p => p.active && (p.roles || []).includes('rep') && inBoard(p));
 // 'draft' = طلب جديد لسه ما انحفظ بالقاعدة (ما يطلع باللوحة لحد الحفظ)
 export const getInv = id => id === 'draft' ? S.draft : S.INVOICES.find(i => i.id === +id);
 export const daysIn = inv => (Date.now() - new Date(inv.stage_at).getTime()) / DAY;

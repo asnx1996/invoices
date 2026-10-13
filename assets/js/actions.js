@@ -1,7 +1,7 @@
-import { S, getInv, userName } from './state.js';
+import { S, getInv, userName, boardName } from './state.js';
 import { sb, rpc, refreshInvoice, loadInvoices } from './api.js';
 import { can } from './can.js';
-import { ask, toast, num } from './util.js';
+import { ask, toast, num, esc } from './util.js';
 import { openDrawer, closeDrawer, reloadActivity } from './drawer.js';
 
 export function waitingOn(inv) {
@@ -93,6 +93,13 @@ export const ACTIONS = {
   cancelDeleteReq: inv => step('inv_cancel_delete_request', { p_id: inv.id },
     inv.delete_req_by === S.ME.id ? 'انلغى طلب الحذف' : 'انرفض طلب الحذف', inv.id),
   toggleUrgent: inv => step('inv_set_urgent', { p_id: inv.id, p_on: !inv.urgent }, inv.urgent ? 'انشالت علامة طارئ' : 'انأشر الطلب طارئ', inv.id),
+  setBoard: inv => {
+    const opts = S.BOARDS.filter(b => b.id !== inv.board_id).map(b => `<option value="${b.id}">${esc(b.name)}</option>`).join('');
+    ask('نقل الطلب #' + inv.id + ' لبورد ثاني', [{ id: 'b', label: 'إلى البورد', type: 'select', opts, req: true,
+      help: 'الطلب يختفي من هذا البورد. تأكد إن المندوب عضو بالبورد الجديد حتى يشوفه' }],
+      // الطلب يطلع من البورد الحالي، والدرج ينسد وحده (renderDrawer)
+      v => step('inv_set_board', { p_id: inv.id, p_board: +v.b }, 'انتقل الطلب لبورد ' + boardName(+v.b), inv.id), { okText: 'نقل' });
+  },
   delete: inv => ask('حذف الطلب #' + inv.id, [], () => deleteInvoice(inv),
     { okText: 'حذف نهائي', danger: true, msg: 'ينحذف الطلب وملفه وتعليقاته وسجله نهائياً، وما يرجع.' }),
 };

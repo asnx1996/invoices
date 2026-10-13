@@ -91,6 +91,7 @@ async function saveDraft() {
   if (!dr.customer_id) { toast('اختار الزبون من القائمة أول'); const f = $('#f_customer_pick'); f && f.focus(); return }
   const btn = $('#saveDraft'); btn.classList.add('busy'); btn.setAttribute('aria-busy', 'true');
   const { data, error } = await sb.from('invoices').insert({
+    ...(S.board ? { board_id: S.board } : {}),
     rep_id: dr.rep_id, customer_id: dr.customer_id, customer: dr.customer, quote_no: dr.quote_no ?? '', res_no: dr.res_no ?? '', value: dr.value ?? 0,
   }).select().single();
   if (error) { btn.classList.remove('busy'); btn.removeAttribute('aria-busy'); return toast(error.message) }
@@ -167,7 +168,7 @@ function actionsHTML(inv) {
     btn('approve', 'موافقة على الشروط', 'ok', 'check'), btn('returnToAcc', 'إرجاع للحسابات', 'bad', 'back'),
     btn('custAccept', 'الزبون موافق', 'ok', 'check'), btn('custRefuse', 'الزبون رفض', 'bad', 'x'),
     btn('complete', 'تحويل لمبيعات + رقم المبيعات', 'ok', 'check')].join('');
-  const small = [btn('move', 'نقل لمرحلة ثانية', 'sm', 'board'), can('toggleUrgent', inv) ? `<button class="btn sm ${inv.urgent ? '' : 'bad'}" data-act="toggleUrgent" aria-pressed="${!!inv.urgent}">${ic('flame')}${inv.urgent ? 'شيل علامة طارئ' : 'طارئ'}</button>` : '', btn('requestDelete', 'طلب حذف', 'bad sm', 'trash'), inv.delete_req_at ? '' : btn('delete', 'حذف', 'bad sm', 'trash')].join('');
+  const small = [btn('move', 'نقل لمرحلة ثانية', 'sm', 'board'), btn('setBoard', 'نقل لبورد ثاني', 'sm', 'board'), can('toggleUrgent', inv) ? `<button class="btn sm ${inv.urgent ? '' : 'bad'}" data-act="toggleUrgent" aria-pressed="${!!inv.urgent}">${ic('flame')}${inv.urgent ? 'شيل علامة طارئ' : 'طارئ'}</button>` : '', btn('requestDelete', 'طلب حذف', 'bad sm', 'trash'), inv.delete_req_at ? '' : btn('delete', 'حذف', 'bad sm', 'trash')].join('');
   let wait;
   if (inv.stage === 'done') wait = `تمت برقم مبيعات <b>${esc(inv.sales_no)}</b> — ${dOnly(inv.closed_at)}`;
   else if (inv.stage === 'cancel') wait = `ملغاة: ${esc(inv.cancel_reason)}`;

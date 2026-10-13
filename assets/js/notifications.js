@@ -1,7 +1,7 @@
 // لوحة الإشعارات (الجرس): تغيّر مرحلة طلبك، أو أحد ذكرك بـ @ بتعليق أو بالملاحظات.
 // الإشعارات تنكتب بالقاعدة (تريغرات 007) وتوصل مباشرة عبر Realtime.
-import { S, COLS, SUB, getInv, userName } from './state.js';
-import { sb, refreshInvoice } from './api.js';
+import { S, COLS, SUB, userName } from './state.js';
+import { sb, findInvoice } from './api.js';
 import { $, esc, ic, toast } from './util.js';
 import { VAPID_PUBLIC_KEY } from './config.js';
 import { avatarHTML } from './avatars.js';
@@ -161,8 +161,7 @@ async function markRead(ids) {
 
 async function openInv(id) {
   if (!id) return;
-  if (!getInv(id)) await refreshInvoice(id);   // ممكن طلب مغلق قديم مو ضمن الفترة المحمّلة
-  getInv(id) ? openDrawer(id) : toast('الطلب #' + id + ' انحذف أو ما عندك صلاحية تشوفه');
+  (await findInvoice(id)) ? openDrawer(id) : toast('الطلب #' + id + ' انحذف أو ما عندك صلاحية تشوفه');
 }
 
 function setOpen(v) {

@@ -1,4 +1,5 @@
 import { rpc } from './api.js';
+import { S } from './state.js';
 import { $, esc, fmt, money, pct, ymd } from './util.js';
 
 const STAGE_LABEL = { new: 'طلب جديد (المندوب)', acc: 'الحسابات', 'decision:mgr': 'موافقة المدير', 'decision:cust': 'رد الزبون', 'decision:wh': 'تحويل المخزن' };
@@ -18,7 +19,7 @@ export function initReports() {
 export async function renderReports() {
   const box = $('#repOut');
   box.innerHTML = '<div class="loading">جاري التحميل...</div>';
-  const r = await rpc('report_summary', { p_from: $('#repFrom').value, p_to: $('#repTo').value });
+  const r = await rpc('report_summary', { p_from: $('#repFrom').value, p_to: $('#repTo').value, ...(S.board ? { p_board: S.board } : {}) });
   if (!r.ok) { box.innerHTML = ''; return }
   const d = r.data, t = d.totals;
 

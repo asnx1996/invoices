@@ -1,7 +1,7 @@
 import { S, onChange, reps, hasRole, getInv } from './state.js';
-import { sb, getRange, setRange, refreshInvoice } from './api.js';
+import { sb, getRange, setRange, setBoard, findInvoice } from './api.js';
 import { can } from './can.js';
-import { $, $$, toast } from './util.js';
+import { $, $$, toast, esc } from './util.js';
 import { initAuth } from './auth.js';
 import { initBoard, renderBoard, fillFilters } from './board.js';
 import { initDrawer, openDrawer, hideDrawer, openDraft } from './drawer.js';
@@ -62,10 +62,25 @@ onChange(() => {
   if (!S.ME) return;
   fillFilters(); renderBoard();
   if (view === 'customers') renderCustomers();
+  fillBoards();
   if (pendingInv && S.loaded) {
     const id = pendingInv; pendingInv = null;
-    getInv(id) ? openDrawer(id) : toast('الطلب #' + id + ' مو موجود أو ما عندك صلاحية تشوفه');
+    findInvoice(id).then(ok => ok ? openDrawer(id) : toast('الطلب #' + id + ' مو موجود أو ما عندك صلاحية تشوفه'));
   }
+});
+
+// اختيار البورد: يبين بس إذا المستخدم عنده أكثر من بورد
+function fillBoards() {
+  const sel = $('#boardSel'), list = S.BOARDS || [];
+  const html = list.map(b => `<option value="${b.id}">${esc(b.name)}</option>`).join('');
+  if (sel.dataset.html !== html) { sel.innerHTML = html; sel.dataset.html = html }
+  if (S.board) sel.value = String(S.board);
+  sel.classList.toggle('hidden', list.length < 2);
+  $('#noBoard').classList.toggle('hidden', !(S.BOARDS && !S.BOARDS.length));
+}
+$('#boardSel').addEventListener('change', async e => {
+  await setBoard(+e.target.value);
+  if (view === 'reports') renderReports();
 });
 
 $$('.tab').forEach(t => t.onclick = () => show(t.dataset.view));

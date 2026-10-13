@@ -70,6 +70,7 @@
 <header>
   <div class="bar">
     <h1 class="brand"><img class="brand-image" src="assets/brand/atlasplast-logo.png" alt="Atlasplast" width="344" height="200"><span>فواتير المبيعات</span></h1>
+    <select id="boardSel" class="board-sel hidden" aria-label="البورد" title="البورد"></select>
     <nav class="tabs" aria-label="الأقسام">
       <button class="tab" data-view="board" aria-current="page">اللوحة</button>
       <button class="tab hidden" data-view="reports" id="tabReports">التقارير</button>
@@ -102,6 +103,7 @@
 </header>
 
 <main tabindex="-1" id="viewBoard">
+  <div class="cfg-warn hidden" id="noBoard">ما عندك بورد بعد. راجع الأدمن حتى يضيفك على بورد.</div>
   <div class="stats" id="stats"></div>
   <div class="board-wrap"><div class="board" id="board"></div></div>
 </main>
@@ -147,6 +149,14 @@
       </div>
       <p class="note">تسوي الحساب هنا وتنطي الموظف اسم المستخدم والرمز. تكدر تنطي الشخص أكثر من دور (مثلاً مندوب + محاسب). الموظف يغير رمزه من زر المفتاح فوق.</p>
       <div class="tbl-wrap"><table id="usersTbl"></table></div>
+    </div>
+    <div class="panel hidden" id="boardsPanel">
+      <div class="page-head">
+        <h3>البوردات</h3>
+        <button class="btn primary" id="addBoardBtn"><svg class="i"><use href="#ic-plus"/></svg>بورد جديد</button>
+      </div>
+      <p class="note">كل بورد معزول بطلباته. تحدد كل مستخدم يا بوردات يشوف من عمود "البوردات" بجدول المستخدمين. الأدمن يشوف كل البوردات.</p>
+      <div class="tbl-wrap"><table id="boardsTbl"></table></div>
     </div>
     <div class="panel">
       <h3 style="margin-top:0">إعدادات الموقع</h3>
