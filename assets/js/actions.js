@@ -19,6 +19,7 @@ export function missingBasic(inv) {
   if (filled(inv.quote_no) === filled(inv.res_no)) m.push('رقم عرض السعر أو رقم الحجز (واحد منهم فقط)');
   if (num(inv.value) <= 0) m.push('قيمة الفاتورة');
   if (!inv.pdf_path) m.push('ملف الـ PDF');
+  if (inv.disc_req && (num(inv.disc_pct) <= 0 || num(inv.disc_pct) > 100)) m.push('نسبة طلب الخصم');
   return m;
 }
 

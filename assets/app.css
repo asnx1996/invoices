@@ -669,3 +669,17 @@ body.has-bg .home-title,body.has-bg .home-sub{display:inline-block;background:co
 .blur-row{display:flex;align-items:center;gap:10px;margin:4px 0 12px;font-size:14px;font-weight:600}
 .blur-row input{flex:1;accent-color:var(--primary)}
 .blur-row output{min-width:3.2em;font-variant-numeric:tabular-nums;color:var(--muted)}
+
+/* تعديلات ما انحفظت: الحقل يتلون ويبين قيمته قبل التعديل */
+.fld.chg input,.fld.chg select,.fld.chg textarea{border-color:var(--warn);background:var(--warn-soft);box-shadow:0 0 0 1px var(--warn)}
+.fld.chg label{color:var(--warn);font-weight:700}
+.fld.chg label::after{content:" · تغيّر";font-weight:600}
+.toggle.chg{color:var(--warn);font-weight:700}
+.was{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted)}
+.toggle .was{margin-inline-start:auto}
+.was .i{width:13px;height:13px}
+.was b{color:var(--text);text-decoration:line-through;text-decoration-color:var(--warn)}
+.preview-note{display:flex;align-items:center;gap:6px;margin-bottom:8px;padding:6px 10px;border-radius:8px;background:var(--warn-soft);color:var(--warn);font-size:13px;font-weight:600}
+.profit.previewing{border-color:var(--warn)}
+.profit tr.chg td{color:var(--warn)}
+.profit s.old{color:var(--muted);font-weight:400;font-size:.9em}

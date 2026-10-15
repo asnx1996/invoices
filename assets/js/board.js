@@ -1,4 +1,4 @@
-import { S, COLS, SUB, MONTHS, getInv, userName, reps, isActive, isUrgent, ageLevel, daysIn, hasRole, getBoard } from './state.js';
+import { S, BOARD_COLS, colKey, MONTHS, getInv, userName, reps, isActive, isUrgent, ageLevel, daysIn, hasRole, getBoard } from './state.js';
 import { $, $$, esc, num, money, pct, ic, toast, ask } from './util.js';
 import { avatarHTML } from './avatars.js';
 import { can } from './can.js';
@@ -60,9 +60,9 @@ function cardHTML(inv) {
   if (urgent) alert.push(`<span class="badge b-urgent">${ic('flame')}طارئ</span>`);
   if (inv.delete_req_at) alert.push(`<span class="badge b-bad">${ic('trash')}طلب حذف</span>`);
   if (lvl) alert.push(`<span class="badge ${lvl === 2 ? 'b-bad' : 'b-warn'}">${ic('clock')}${d} يوم بالمرحلة</span>`);
-  if (inv.stage === 'decision') b.push(`<span class="badge b-vio">${SUB[inv.sub]}</span>`);
   if (inv.returned && isActive(inv)) b.push(`<span class="badge b-warn">${ic('back')}مرجعة ${esc(inv.returned)}</span>`);
   if (inv.payment === 'credit' && inv.credit_months) b.push(`<span class="badge b-pri">آجل ${MONTHS[inv.credit_months] || ''}</span>`);
+  if (inv.disc_req) b.push(`<span class="badge b-warn">طلب خصم ${esc(inv.disc_pct ?? '')}%</span>`);
   if (inv.ld) b.push(`<span class="badge b-ok">خصم لاحق ${esc(inv.ld_pct)}%</span>`);
   if (num(inv.points) > 0) b.push(`<span class="badge b-vio">نقاط ${esc(inv.points)}</span>`);
   const pr = S.PROFITS[inv.id];
@@ -91,7 +91,7 @@ const skel = n => '<div class="card skel" aria-hidden="true"><i></i><i></i><i></
 
 function sortSelect(k) {
   const cur = sortBy[k] || 'age';
-  return `<select class="col-sort" data-sort="${k}" aria-label="ترتيب عمود ${COLS.find(c => c.k === k).t}">${Object.entries(SORTS)
+  return `<select class="col-sort" data-sort="${k}" aria-label="ترتيب عمود ${BOARD_COLS.find(c => c.k === k).t}">${Object.entries(SORTS)
     .filter(([, s]) => !s[2] || seesProfit())
     .map(([v, s]) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${s[0]}</option>`).join('')}</select>`;
 }
@@ -100,8 +100,8 @@ export function renderBoard() {
   if (!S.ME) return;
   if (!S.loaded) {
     $('#board').setAttribute('aria-busy', 'true');
-    $('#board').innerHTML = COLS.map((c, i) => `<section class="column"><div class="col-head"><span class="dot" style="background:${c.c}"></span><h2>${c.t}</h2></div>
-      <div class="col-body">${skel([3, 2, 2, 1, 1][i])}</div></section>`).join('');
+    $('#board').innerHTML = BOARD_COLS.map((c, i) => `<section class="column"><div class="col-head"><span class="dot" style="background:${c.c}"></span><h2>${c.t}</h2></div>
+      <div class="col-body">${skel([3, 2, 2, 1, 1, 1, 1][i])}</div></section>`).join('');
     $('#stats').innerHTML = '<div class="stat skel" aria-hidden="true"><i></i><i></i></div>'.repeat(3);
     $('#boardTitle').textContent = (getBoard() || {}).name || '';
     return;
@@ -113,10 +113,10 @@ export function renderBoard() {
 
   $('#board').removeAttribute('aria-busy');
   const list = filtered();
-  $('#board').innerHTML = COLS.map(c => {
+  $('#board').innerHTML = BOARD_COLS.map(c => {
     const cmp = (SORTS[sortBy[c.k]] || SORTS.age)[1];
     // الطارئة دائماً فوق، وبعدها الترتيب اللي اختاره
-    const items = list.filter(i => i.stage === c.k).sort((x, y) => isUrgent(y) - isUrgent(x) || cmp(x, y));
+    const items = list.filter(i => colKey(i) === c.k).sort((x, y) => isUrgent(y) - isUrgent(x) || cmp(x, y));
     const urg = items.filter(isUrgent).length;
     if (folded.has(c.k)) return `<section class="column folded" data-col="${c.k}">
       <button type="button" class="col-fold" aria-expanded="false" aria-label="فتح عمود ${c.t}" title="فتح العمود">
@@ -215,19 +215,18 @@ function toggleCard(card) {
 }
 
 function handleDrop(id, to) {
-  const inv = getInv(id); if (!inv || inv.stage === to) return;
-  const f = inv.stage; let a = null;
-  if (f === 'new' && to === 'acc') a = 'sendToAcc';
-  else if (f === 'acc' && to === 'new') a = 'returnToRep';
-  else if (f === 'acc' && to === 'decision') a = 'sendToDecision';
-  else if (f === 'decision' && to === 'acc' && inv.sub === 'mgr') a = 'returnToAcc';
-  else if (f === 'decision' && to === 'done' && inv.sub === 'wh') a = 'complete';
-  else if (f === 'decision' && to === 'cancel' && inv.sub === 'cust') a = 'custRefuse';
-  const order = { new: 1, acc: 2, decision: 3, done: 4, cancel: 4 };
+  const inv = getInv(id), f = inv && colKey(inv); if (!inv || f === to) return;
+  // الخطوة الطبيعية بين كل عمودين
+  const a = {
+    'new>acc': 'sendToAcc', 'acc>new': 'returnToRep', 'acc>decision:mgr': 'sendToDecision',
+    'decision:mgr>acc': 'returnToAcc', 'decision:mgr>decision:cust': 'approve',
+    'decision:cust>decision:wh': 'custAccept', 'decision:cust>cancel': 'custRefuse', 'decision:wh>done': 'complete',
+  }[f + '>' + to] || null;
+  const order = { new: 1, acc: 2, 'decision:mgr': 3, 'decision:cust': 4, 'decision:wh': 5, done: 6, cancel: 6 };
   const back = order[to] < order[f] || f === 'cancel' || f === 'done';
   // الخطوة العادية (إذا مسموحة)، إلا الرجوع للخلف: الأدمن والمدير ينقلون مباشرة بدون سبب
   if (a && can(a, inv) && !(back && can('move', inv))) return run(a, id);
-  if (can('move', inv) && to !== 'done') return moveTo(inv, to === 'decision' ? 'decision:mgr' : to);
+  if (can('move', inv) && to !== 'done') return moveTo(inv, to);
   if (a) return run(a, id);
   toast('هذا الانتقال غير مسموح. ' + (waitingOn(inv) ? 'الخطوة الحالية: ' + waitingOn(inv) : ''));
 }

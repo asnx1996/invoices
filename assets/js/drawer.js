@@ -1,5 +1,5 @@
 import { S, COLS, SUB, PAY, PAY_LEGACY, PAYER, PAYER_LEGACY, MONTHS, POINT_RATE, hasRole, getInv, userName, reps, isActive, isUrgent,
-  ldAmount, transportAdded, totalAfterTransport, pointsPct, onChange, NOTIF_LEVELS } from './state.js';
+  ldAmount, transportAdded, totalAfterTransport, pointsPct, discPct, onChange, NOTIF_LEVELS } from './state.js';
 import { renderBoard } from './board.js';
 import { $, esc, num, fmt, money, pct, dt, dOnly, ic, toast, ask, cur, rate, numAttrs, numVal } from './util.js';
 import { sb, rpc, refreshInvoice } from './api.js';
@@ -79,7 +79,7 @@ export function closeDrawer(force) {
 
 // طلب جديد: يتعبى بالدرج محلياً، وبس من يضغط "حفظ الطلب" ينضاف للقاعدة ويطلع كبطاقة
 export function openDraft(rep_id) {
-  S.draft = { id: 'draft', stage: 'new', rep_id, customer: '', customer_id: null, quote_no: null, res_no: null, value: null, created_at: new Date().toISOString() };
+  S.draft = { id: 'draft', stage: 'new', rep_id, customer: '', customer_id: null, quote_no: null, res_no: null, value: null, disc_req: false, disc_pct: null, created_at: new Date().toISOString() };
   S.draftFile = null;
   openDrawer('draft');
 }
@@ -93,6 +93,7 @@ async function saveDraft() {
   const { data, error } = await sb.from('invoices').insert({
     ...(S.board ? { board_id: S.board } : {}),
     rep_id: dr.rep_id, customer_id: dr.customer_id, customer: dr.customer, quote_no: dr.quote_no ?? '', res_no: dr.res_no ?? '', value: dr.value ?? 0,
+    ...(dr.disc_req ? { disc_req: true, disc_pct: dr.disc_pct } : {}),
   }).select().single();
   if (error) { btn.classList.remove('busy'); btn.removeAttribute('aria-busy'); return toast(error.message) }
   const file = S.draftFile;
@@ -121,12 +122,25 @@ async function reloadLog() {
 }
 
 // ---------- مكونات الحقول ----------
+// الحقل اللي تغير وما انحفظ: يتلون ويبين جنبه شنو كانت قيمته قبل
+const pendingHas = col => S.drawerId !== 'draft' && col in extra.pending;
+function wasText(col, opts) {
+  const v = (getInv(S.drawerId) || {})[col];
+  if (v === null || v === undefined || v === '') return 'فارغ';
+  if (typeof v === 'boolean') return v ? 'مفعّل' : 'مو مفعّل';
+  if (opts) return opts[v] ?? String(v);
+  if (col === 'rep_id') return userName(v);
+  return typeof v === 'number' ? fmt(v) : String(v);
+}
+const wasHTML = (col, opts) => `<div class="was">${ic('back')}قبل: <b>${esc(wasText(col, opts))}</b></div>`;
+
 function fld(label, col, val, { type = 'text', req = false, dis = false, full = false, opts = null, help = '', rer = false, list = '' } = {}) {
   const id = 'f_' + col; let input;
+  const chg = pendingHas(col);
   if (opts) input = `<select id="${id}" data-f="${col}" ${rer ? 'data-rer="1"' : ''} ${dis ? 'disabled' : ''}><option value="">— اختر —</option>${Object.entries(opts).map(([k, v]) => `<option value="${esc(k)}" ${String(val) === String(k) ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select>`;
   else if (type === 'textarea') input = `<textarea id="${id}" data-f="${col}" ${dis ? 'disabled' : ''}>${esc(val)}</textarea>`;
   else input = `<input ${type === 'number' ? numAttrs : `type="${type}"`} id="${id}" data-f="${col}" value="${esc(type === 'number' ? numVal(val) : val ?? '')}" ${dis ? 'disabled' : ''} ${rer ? 'data-rer="1"' : ''} ${list ? `list="${list}"` : ''}>`;
-  return `<div class="fld ${full ? 'full' : ''}"><label for="${id}">${label}${req ? ' <span class="req">*</span>' : ''}</label>${input}${help ? `<div class="help">${help}</div>` : ''}</div>`;
+  return `<div class="fld ${full ? 'full' : ''}${chg ? ' chg' : ''}"><label for="${id}">${label}${req ? ' <span class="req">*</span>' : ''}</label>${input}${help ? `<div class="help">${help}</div>` : ''}${chg ? wasHTML(col, opts) : ''}</div>`;
 }
 // قيمة الفاتورة تنحفظ بالدولار. اللي يعدلها يختار العملة أول؛ الدينار ينقسم على سعر الصرف
 function valueFld(inv, eb) {
@@ -138,10 +152,10 @@ function valueFld(inv, eb) {
   if (!vc) return pick + `<div class="fld"><label for="f_value">قيمة الفاتورة <span class="req">*</span></label><input ${numAttrs} id="f_value" disabled placeholder="اختار العملة أول"></div>`;
   if (vc === 'usd') return pick + fld(`قيمة الفاتورة (${cur()})`, 'value', inv.value, { type: 'number', req: true, rer: true, help });
   const conv = extra.iqd ? `= ${money(inv.value)} (سعر الصرف ${fmt(rate())})` : `تنقسم على سعر الصرف ${fmt(rate())} وتنحفظ بالدولار`;
-  return pick + `<div class="fld"><label for="f_value">قيمة الفاتورة (دينار) <span class="req">*</span></label>
-    <input ${numAttrs} id="f_value" data-iqd="1" value="${esc(numVal(extra.iqd))}"><div class="help">${conv}${help ? ' · ' + help : ''}</div></div>`;
+  return pick + `<div class="fld${pendingHas('value') ? ' chg' : ''}"><label for="f_value">قيمة الفاتورة (دينار) <span class="req">*</span></label>
+    <input ${numAttrs} id="f_value" data-iqd="1" value="${esc(numVal(extra.iqd))}"><div class="help">${conv}${help ? ' · ' + help : ''}</div>${pendingHas('value') ? wasHTML('value') : ''}</div>`;
 }
-const tog = (label, col, val, dis) => `<label class="toggle" for="f_${col}"><input type="checkbox" id="f_${col}" data-f="${col}" data-rer="1" ${val ? 'checked' : ''} ${dis ? 'disabled' : ''}>${label}</label>`;
+const tog = (label, col, val, dis) => `<label class="toggle${pendingHas(col) ? ' chg' : ''}" for="f_${col}"><input type="checkbox" id="f_${col}" data-f="${col}" data-rer="1" ${val ? 'checked' : ''} ${dis ? 'disabled' : ''}>${label}${pendingHas(col) ? `<span class="was">قبل: <b>${esc(wasText(col))}</b></span>` : ''}</label>`;
 const filled = v => String(v ?? '').trim() !== '';
 
 function stepsHTML(inv) {
@@ -182,14 +196,15 @@ function actionsHTML(inv) {
 function customerFld(inv, dis) {
   if (dis) return `<div class="fld full"><label>اسم الزبون</label><input type="text" value="${esc(inv.customer)}" disabled></div>`;
   const warn = !inv.customer_id ? `<div class="help" style="color:var(--bad)">${filled(inv.customer) ? 'الاسم مو من القائمة — ' : ''}اختار الزبون من القائمة</div>` : '<div class="help">اكتب جزء من الاسم واختار من القائمة</div>';
-  return `<div class="fld full"><label for="f_customer_pick">اسم الزبون <span class="req">*</span></label>
+  return `<div class="fld full${pendingHas('customer') ? ' chg' : ''}"><label for="f_customer_pick">اسم الزبون <span class="req">*</span></label>
     <input type="search" id="f_customer_pick" list="custList" value="${esc(inv.customer)}" autocomplete="off" placeholder="ابحث عن الزبون...">
-    <datalist id="custList">${S.CUSTOMERS.filter(c => c.active).map(c => `<option value="${esc(c.name)}">`).join('')}</datalist>${warn}</div>`;
+    <datalist id="custList">${S.CUSTOMERS.filter(c => c.active).map(c => `<option value="${esc(c.name)}">`).join('')}</datalist>${warn}${pendingHas('customer') ? wasHTML('customer') : ''}</div>`;
 }
 
 function costFld(inv) {
   if (!can('setCost', inv)) return '';
-  if (hasRole('admin')) return fld(`سعر الكلفة (${cur()}) — للأدمن فقط`, 'cost', extra.pendingCost ?? S.COSTS[inv.id] ?? '', { type: 'number', req: true, help: 'ما يظهر لأي أحد غيرك' }).replace('data-f="cost"', 'data-cost="1"');
+  const chg = h => extra.pendingCost != null ? h.replace('class="fld ', 'class="fld chg ').replace(/<\/div>$/, `<div class="was">${ic('back')}قبل: <b>${S.COSTS[inv.id] != null ? esc(fmt(S.COSTS[inv.id])) : 'فارغ'}</b></div></div>`) : h;
+  if (hasRole('admin')) return chg(fld(`سعر الكلفة (${cur()}) — للأدمن فقط`, 'cost', extra.pendingCost ?? S.COSTS[inv.id] ?? '', { type: 'number', req: true, help: 'ما يظهر لأي أحد غيرك' }).replace('data-f="cost"', 'data-cost="1"'));
   if (inv.cost_set && !extra.costEdit)
     return `<div class="fld"><label>سعر الكلفة</label><div class="cost-set">${ic('check')}مسجّل (مخفي) <button class="btn sm" data-costedit="1">تغيير</button></div></div>`;
   return fld(`سعر الكلفة (${cur()})`, 'cost', extra.pendingCost ?? '', { type: 'number', req: true, help: 'بعد الحفظ يختفي ومحد يشوفه غير الأدمن' }).replace('data-f="cost"', 'data-cost="1"');
@@ -216,20 +231,45 @@ function termsHTML(inv) {
     </div></section>`;
 }
 
+// الربح: إذا اكو تعديلات ما انحفظت، نحسب النتيجة الجديدة بالمتصفح ونبينها جنب القديمة (نفس معادلة inv_profit_rows)
 function profitHTML(inv) {
   if (!can('seeProfit', inv)) return '';
-  const p = S.PROFITS[inv.id];
-  if (!p) return `<section class="blk"><h4>الربح</h4><div class="help">${inv.cost_set ? 'جاري الحساب...' : 'ما انكتب سعر الكلفة بعد'}</div></section>`;
-  const ld = inv.ld ? num(inv.ld_pct) : 0, pts = pointsPct(inv), net = num(p.net_pct);
+  const real = getInv(inv.id), p = S.PROFITS[inv.id];
+  const costNow = extra.pendingCost ?? (hasRole('admin') ? S.COSTS[inv.id] : null);
+  if (!p && costNow == null) return `<section class="blk"><h4>الربح</h4><div class="help">${inv.cost_set ? 'جاري الحساب...' : 'ما انكتب سعر الكلفة بعد'}</div></section>`;
+  // الكلفة: الأدمن يعرفها، والمدير نطلعها من الربح والإجمالي المحفوظين
+  const cost = costNow != null ? num(costNow) : num(p.total) * (1 - num(p.gross_pct) / 100);
+  const calc = x => {
+    const total = totalAfterTransport(x), gross = total ? (1 - cost / total) * 100 : 0;
+    const ld = x.ld ? num(x.ld_pct) : 0, disc = discPct(x), pts = pointsPct(x);
+    return { total, gross, ld, disc, pts, net: gross - ld - disc - pts };
+  };
+  const now = calc(inv), before = p ? { ...calc(real), total: num(p.total), gross: num(p.gross_pct), net: num(p.net_pct) } : null;
+  const preview = dirty();
+  // صف: القيمة الجديدة، وإذا تغيرت تتلون وتبين القديمة جنبها
+  const row = (label, k, f, cls = '') => {
+    const ch = preview && before && Math.abs(now[k] - before[k]) > 0.005;
+    return `<tr class="${cls}${ch ? ' chg' : ''}"><td>${label}</td><td>${ch ? `<s class="old">${f(before[k])}</s> ` : ''}<span class="${k === 'net' ? (now.net >= 0 ? 'pos' : 'neg') : ''}">${f(now[k])}</span></td></tr>`;
+  };
   return `<section class="blk"><h4>الربح <span class="lock">${ic('lock')}للأدمن والمدير</span></h4>
-    <div class="profit"><table>
-      <tr><td>الإجمالي بعد النقل</td><td>${money(p.total)}</td></tr>
-      ${hasRole('admin') && S.COSTS[inv.id] != null ? `<tr><td>سعر الكلفة</td><td>${money(S.COSTS[inv.id])}</td></tr>` : ''}
-      <tr><td>الربح (1 − الكلفة ÷ الإجمالي)</td><td>${pct(p.gross_pct)}</td></tr>
-      <tr><td>− الخصم اللاحق</td><td>${pct(ld)}</td></tr>
-      <tr><td>− النقاط (${fmt(inv.points)} × ${POINT_RATE})</td><td>${pct(pts)}</td></tr>
-      <tr class="net"><td><b>صافي الربح</b></td><td class="${net >= 0 ? 'pos' : 'neg'}">${pct(net)}</td></tr>
+    ${preview ? `<div class="preview-note">${ic('clock')}معاينة — هذي النتيجة بعد حفظ التعديلات</div>` : ''}
+    <div class="profit${preview ? ' previewing' : ''}"><table>
+      ${row('الإجمالي بعد النقل', 'total', money)}
+      ${hasRole('admin') && costNow != null ? `<tr class="${extra.pendingCost != null ? 'chg' : ''}"><td>سعر الكلفة</td><td>${extra.pendingCost != null && S.COSTS[inv.id] != null ? `<s class="old">${money(S.COSTS[inv.id])}</s> ` : ''}${money(costNow)}</td></tr>` : ''}
+      ${row('الربح (1 − الكلفة ÷ الإجمالي)', 'gross', pct)}
+      ${row('− الخصم اللاحق', 'ld', pct)}
+      ${row('− طلب خصم المندوب', 'disc', pct)}
+      ${row(`− النقاط (${fmt(inv.points)} × ${POINT_RATE})`, 'pts', pct)}
+      ${row('<b>صافي الربح</b>', 'net', pct, 'net')}
     </table></div></section>`;
+}
+
+// طلب خصم من المندوب: نسبة تنطرح من صافي الربح (015)
+function discHTML(inv, dis) {
+  if (!('disc_req' in inv)) return ''; // قبل ما تتشغل 015
+  return `<div class="term-box">${tog('طلب خصم', 'disc_req', inv.disc_req, dis)}
+    ${inv.disc_req ? `<div class="grid">${fld('نسبة الخصم المطلوبة %', 'disc_pct', inv.disc_pct, { type: 'number', req: true, dis, rer: true })}
+      <div class="fld"><div class="help" style="margin-top:28px">مبلغ الخصم: <b>${money(num(inv.value) * discPct(inv) / 100)}</b><br>القيمة بعد الخصم: <b>${money(num(inv.value) * (1 - discPct(inv) / 100))}</b></div></div></div>` : ''}</div>`;
 }
 
 // تعليق: صاحبه يعدله ويحذفه، والأدمن يحذف أي تعليق (نفس قواعد comment_edit/comment_delete بـ 011)
@@ -291,6 +331,7 @@ export function renderDrawer() {
         ${fld('رقم عرض السعر', 'quote_no', inv.quote_no, { dis: qDis })}
         ${fld('رقم الحجز', 'res_no', inv.res_no, { dis: rDis, help: 'واحد منهم فقط' })}
         ${valueFld(inv, eb)}
+        ${discHTML(inv, !can('editValue', inv))}
         ${hasRole('admin') && inv.stage === 'new' ? fld('المندوب', 'rep_id', inv.rep_id, { opts: Object.fromEntries(reps().map(r => [r.id, r.full_name])), rer: true }) : `<div class="fld"><label>المندوب</label><input type="text" value="${esc(userName(inv.rep_id))}" disabled></div>`}
         <div class="fld full"><label>ملف الفاتورة PDF <span class="req">*</span></label>
           <div class="pdf">${ic('file')}<span class="name" title="${esc(inv.pdf_name || '')}">${inv.pdf_path || inv.pdf_name ? esc(inv.pdf_name || 'ملف') + ' · ' + Math.round((inv.pdf_size || 0) / 1024) + ' KB' : '<span style="color:var(--faint)">ما مرفوع ملف</span>'}</span>
@@ -455,6 +496,14 @@ export function initDrawer() {
   initSwipe(d);
   d.addEventListener('keydown', e => { if (e.target.id === 'cIn' && e.key === 'Enter') { e.preventDefault(); addComment() } });
 
+  // أثناء الكتابة (قبل ما يطلع من الحقل) الحقل يتلون إذا صار يختلف عن المحفوظ
+  d.addEventListener('input', e => {
+    const el = e.target, col = el.dataset && el.dataset.f, box = el.closest && el.closest('.fld');
+    if (!col || !box || S.drawerId === 'draft' || el.type === 'checkbox') return;
+    const real = getInv(S.drawerId); if (!real) return;
+    const v = el.value.trim(), o = real[col];
+    box.classList.toggle('chg', el.dataset.num ? (v === '' ? o != null && o !== '' : num(v) !== num(o) || o == null) : !same(v, o));
+  });
   // رقم عرض السعر ورقم الحجز: إذا انكتب واحد، الثاني يتقفل
   d.addEventListener('input', e => {
     const pair = { f_quote_no: 'f_res_no', f_res_no: 'f_quote_no' }[e.target.id];
@@ -499,10 +548,10 @@ export function initDrawer() {
     }
 
     if (el.dataset.cost) {
-      if (el.value.trim() === '') { extra.pendingCost = null; paintSaveBar(); return }
+      if (el.value.trim() === '') { extra.pendingCost = null; renderDrawer(); return }
       const v = num(el.value); if (v <= 0) { el.value = extra.pendingCost ?? ''; return toast('سعر الكلفة لازم أكبر من صفر') }
       extra.pendingCost = hasRole('admin') && same(v, S.COSTS[inv.id]) ? null : v;
-      paintSaveBar();
+      renderDrawer(); // معاينة الربح تتحدث ويا الكلفة
       return;
     }
 
@@ -510,13 +559,14 @@ export function initDrawer() {
     let val = el.type === 'checkbox' ? el.checked : el.value;
     // الحقول النصية بالقاعدة ما تقبل null، الفارغ ينحفظ ''
     if (val === '' && !['quote_no', 'res_no', 'notes'].includes(col)) val = null;
-    if (['value', 'transport_amt', 'ld_pct', 'points', 'credit_months'].includes(col)) val = val === null ? null : num(val);
+    if (['value', 'transport_amt', 'ld_pct', 'points', 'credit_months', 'disc_pct'].includes(col)) val = val === null ? null : num(val);
     if (col === 'points' && val === null) val = 0;
     const patch = { [col]: val };
     // تنظيف الحقول التابعة
     if (col === 'payment' && val !== 'credit') patch.credit_months = null;
     if (col === 'payer' && val !== 'customer') patch.transport_amt = 0;
     if (col === 'ld' && !val) patch.ld_pct = null;
+    if (col === 'disc_req' && !val) patch.disc_pct = null;
     stage(inv, patch, !!el.dataset.rer || Object.keys(patch).length > 1);
   });
 }
