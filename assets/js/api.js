@@ -76,8 +76,8 @@ export async function saveSetting(key, value) {
 
 // البوردات اللي يشوفها المستخدم + أعضاءها. قبل ما تتشغل 012 الجدول ما موجود: S.BOARDS يبقى null
 export async function loadBoards() {
-  // الأعمدة الأحدث أول؛ إذا migration بعده ما انشغل نرجع خطوة (014 ← 013 ← 012)
-  const cols = ['id,name,bg,bg_custom,blur,bg_fit', 'id,name,bg,bg_custom,blur', 'id,name'];
+  // الأعمدة الأحدث أول؛ إذا migration بعده ما انشغل نرجع خطوة (016 ← 014 ← 013 ← 012)
+  const cols = ['id,name,bg,bg_custom,blur,bg_fit,has_anim', 'id,name,bg,bg_custom,blur,bg_fit', 'id,name,bg,bg_custom,blur', 'id,name'];
   let [b, m] = await Promise.all([sb.from('boards').select(cols[0]).order('id'), sb.from('board_members').select('board_id,user_id')]);
   for (let i = 1; b.error && i < cols.length; i++) b = await sb.from('boards').select(cols[i]).order('id');
   S.boardsLoaded = true;
@@ -100,6 +100,12 @@ export async function saveBoardLook(id, patch) {
   if (error) { toast(error.message); return false }
   Object.assign(getBoard(id) || {}, patch); changed();
   return true;
+}
+
+// الخلفية المتحركة ثقيلة: تنجاب وحدها بس على الحاسبة (016)
+export async function loadBoardAnim(id) {
+  const { data, error } = await sb.from('boards').select('bg_anim').eq('id', id).maybeSingle();
+  return error || !data ? null : data.bg_anim;
 }
 
 export async function loadNotifPrefs() {

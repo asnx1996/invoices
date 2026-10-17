@@ -32,25 +32,28 @@ export async function openDrawer(id, push = true) {
     d.querySelector('.close').focus({ preventScroll: true });
   }
   if (id === 'draft') return;
-  const [c, l] = await Promise.all([
-    sb.from('invoice_comments').select('*').eq('invoice_id', id).order('at'),
-    sb.from('invoice_log').select('*').eq('invoice_id', id).order('at'),
-  ]);
-  extra.comments = c.data || []; extra.log = l.data || [];
+  const [c, l] = await Promise.all([loadComments(id), sb.from('invoice_log').select('*').eq('invoice_id', id).order('at')]);
+  extra.comments = c; extra.log = l.data || [];
   const inv = getInv(id);
   if (inv && inv.pdf_path) { const { data } = await sb.storage.from('invoices').createSignedUrl(inv.pdf_path, 3600); extra.pdfUrl = data && data.signedUrl }
   if (S.drawerId === id) renderDrawer();
 }
 
+// التعليقات مع تفاعلاتها (016). قبل ما تتشغل 016 التعليقات تطلع بدون تفاعلات
+async function loadComments(id) {
+  const { data } = await sb.from('invoice_comments').select('*').eq('invoice_id', id).order('at');
+  const list = data || [];
+  const r = list.length ? await sb.from('comment_reactions').select('comment_id,user_id,emoji').in('comment_id', list.map(c => c.id)) : { data: [] };
+  list.forEach(c => { c.reactions = r.error ? null : (r.data || []).filter(x => x.comment_id === c.id) });
+  return list;
+}
+
 // بعد أي إجراء: التعليقات والسجل ممكن تغيّرت (سبب الإرجاع/النقل ينكتب تعليق)
 export async function reloadActivity(id) {
   if (S.drawerId !== id) return;
-  const [c, l] = await Promise.all([
-    sb.from('invoice_comments').select('*').eq('invoice_id', id).order('at'),
-    sb.from('invoice_log').select('*').eq('invoice_id', id).order('at'),
-  ]);
+  const [c, l] = await Promise.all([loadComments(id), sb.from('invoice_log').select('*').eq('invoice_id', id).order('at')]);
   if (S.drawerId !== id) return;
-  extra.comments = c.data || []; extra.log = l.data || [];
+  extra.comments = c; extra.log = l.data || [];
   renderDrawer();
 }
 
@@ -170,7 +173,7 @@ function deleteReqHTML(inv) {
   const btn = (a, label, cls) => can(a, inv) ? `<button class="btn sm ${cls}" data-act="${a}">${label}</button>` : '';
   const mine = inv.delete_req_by === S.ME.id;
   return `<div class="warnbox">${ic('trash')} <b>طلب حذف</b> من ${esc(userName(inv.delete_req_by))} — ${dOnly(inv.delete_req_at)}<br>السبب: ${esc(inv.delete_req_reason)}
-    <div class="row">${btn('delete', 'حذف نهائي', 'bad')}${hasRole('admin') ? btn('cancelDeleteReq', mine ? 'إلغاء الطلب' : 'رفض طلب الحذف', '') : mine ? btn('cancelDeleteReq', 'إلغاء طلبي', '') : ''}</div></div>`;
+    <div class="row">${btn('delete', 'حذف', 'bad')}${hasRole('admin') ? btn('cancelDeleteReq', mine ? 'إلغاء الطلب' : 'رفض طلب الحذف', '') : mine ? btn('cancelDeleteReq', 'إلغاء طلبي', '') : ''}</div></div>`;
 }
 
 function actionsHTML(inv) {
@@ -277,7 +280,32 @@ function commentHTML(c) {
   const mine = c.author === S.ME.id;
   const canEdit = mine && !c.is_system, canDel = hasRole('admin') || canEdit;
   const acts = canEdit || canDel ? `<span class="c-acts">${canEdit ? `<button type="button" class="c-act" data-cedit="${c.id}">تعديل</button>` : ''}${canDel ? `<button type="button" class="c-act bad" data-cdel="${c.id}">حذف</button>` : ''}</span>` : '';
-  return `<div class="comment ${c.is_system ? 'sys' : ''}${mine ? ' mine' : ''}">${avatarHTML(c.author, 30, 'c-av')}<div class="c-main"><div class="by"><b>${esc(userName(c.author))}</b> · ${dt(c.at)}${c.edited_at ? ' · معدّل' : ''}${acts}</div><div class="c-body">${highlightMentions(esc(c.body))}</div></div></div>`;
+  return `<div class="comment ${c.is_system ? 'sys' : ''}${mine ? ' mine' : ''}">${avatarHTML(c.author, 30, 'c-av')}<div class="c-main"><div class="by"><b>${esc(userName(c.author))}</b> · ${dt(c.at)}${c.edited_at ? ' · معدّل' : ''}${acts}</div><div class="c-body">${highlightMentions(esc(c.body))}</div>${reactionsHTML(c)}</div></div>`;
+}
+
+// تفاعلات: نفس القائمة اللي بالقاعدة (comment_reactions_emoji_chk)
+const EMOJIS = ['👍', '❤️', '😂', '😮', '🙏', '✅'];
+let pickFor = null;
+function reactionsHTML(c) {
+  if (!c.reactions) return '';
+  const chips = EMOJIS.map(e => {
+    const who = c.reactions.filter(r => r.emoji === e); if (!who.length) return '';
+    const me = who.some(r => r.user_id === S.ME.id);
+    return `<button type="button" class="r-chip${me ? ' me' : ''}" data-react="${c.id}" data-emoji="${e}" aria-pressed="${me}" title="${esc(who.map(r => userName(r.user_id)).join('، '))}">${e}<span>${who.length}</span></button>`;
+  }).join('');
+  const pick = pickFor === c.id ? `<span class="r-pick" role="group" aria-label="اختار تفاعل">${EMOJIS.map(e => `<button type="button" class="r-opt" data-react="${c.id}" data-emoji="${e}" aria-label="تفاعل ${e}">${e}</button>`).join('')}</span>` : '';
+  return `<div class="c-reacts">${chips}<button type="button" class="r-add" data-rpick="${c.id}" aria-label="أضف تفاعل" aria-expanded="${pickFor === c.id}">${pickFor === c.id ? '×' : '☺+'}</button>${pick}</div>`;
+}
+
+async function react(id, emoji) {
+  pickFor = null;
+  const c = extra.comments.find(x => x.id === id); if (!c || !c.reactions) return;
+  // نحدّث الشاشة فوراً ونرجّعها إذا فشل
+  const before = c.reactions, mine = before.some(r => r.user_id === S.ME.id && r.emoji === emoji);
+  c.reactions = mine ? before.filter(r => !(r.user_id === S.ME.id && r.emoji === emoji)) : [...before, { comment_id: id, user_id: S.ME.id, emoji }];
+  renderDrawer();
+  const r = await rpc('comment_react', { p_id: id, p_emoji: emoji });
+  if (!r.ok) { c.reactions = before; renderDrawer() }
 }
 
 function editComment(id) {
@@ -358,8 +386,7 @@ async function addComment() {
   const v = $('#cIn').value.trim(); if (!v) return;
   const { error } = await sb.from('invoice_comments').insert({ invoice_id: S.drawerId, body: v });
   if (error) return toast(error.message);
-  const { data } = await sb.from('invoice_comments').select('*').eq('invoice_id', S.drawerId).order('at');
-  extra.comments = data || []; renderDrawer();
+  extra.comments = await loadComments(S.drawerId); renderDrawer();
 }
 
 async function save(inv, patch, rerender) {
@@ -488,6 +515,8 @@ export function initDrawer() {
     if (e.target.closest('[data-costedit]')) { extra.costEdit = true; renderDrawer(); setTimeout(() => { const c = $('#f_cost'); c && c.focus() }, 30); return }
     const ce = e.target.closest('[data-cedit]'); if (ce) return editComment(+ce.dataset.cedit);
     const cd = e.target.closest('[data-cdel]'); if (cd) return deleteComment(+cd.dataset.cdel);
+    const rp = e.target.closest('[data-rpick]'); if (rp) { pickFor = pickFor === +rp.dataset.rpick ? null : +rp.dataset.rpick; return renderDrawer() }
+    const rc = e.target.closest('[data-react]'); if (rc) return react(+rc.dataset.react, rc.dataset.emoji);
     if (e.target.closest('#cBtn')) addComment();
     if (e.target.closest('#saveDraft')) saveDraft();
   });

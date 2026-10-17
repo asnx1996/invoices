@@ -144,6 +144,9 @@
   db.boards.forEach(b => { if (b.blur == null) Object.assign(b, { bg: b.id === 2 ? 'nature' : null, bg_custom: null, blur: 0 }); if (!b.bg_fit) b.bg_fit = 'cover' });
   db.profiles.forEach(p => { if (p.notif_level == null) p.notif_level = 'all' });
   if (!db.invoice_notif_prefs) db.invoice_notif_prefs = [];
+  // 016: تفاعلات التعليقات + الخلفية المتحركة
+  if (!db.comment_reactions) db.comment_reactions = [];
+  db.boards.forEach(b => { b.has_anim = !!b.bg_anim });
   const save = () => store.set(KEY, JSON.stringify({ ...db, files: {} }));
   save();
 
@@ -159,7 +162,7 @@
 
   // ---------- الصلاحيات (نفس policies بالقاعدة) ----------
   const canRead = {
-    invoices: i => inBoard(i.board_id) && (has('admin') || has('mgr') || has('acc') || (has('wh') && ['decision', 'done'].includes(i.stage)) || (has('rep') && i.rep_id === session)),
+    invoices: i => !i.deleted_at && inBoard(i.board_id) && (has('admin') || has('mgr') || has('acc') || (has('wh') && ['decision', 'done'].includes(i.stage)) || (has('rep') && i.rep_id === session)),
     boards: b => inBoard(b.id),
     board_members: m => inBoard(m.board_id),
     invoice_notif_prefs: r => r.user_id === session,
@@ -171,6 +174,7 @@
   };
   const readable = (t, r) => {
     if (canRead[t]) return canRead[t](r);
+    if (t === 'comment_reactions') { const c = db.invoice_comments.find(x => x.id === r.comment_id); return !!c && readable('invoice_comments', c) }
     if (t === 'invoice_comments' || t === 'invoice_log' || t === 'invoice_stage_log') { const i = db.invoices.find(x => x.id === r.invoice_id); return !!i && canRead.invoices(i) }
     return active();
   };
@@ -343,6 +347,7 @@
             if (!has('admin')) return err('ما عندك صلاحية', '42501');
             if (t === 'boards' && db.boards.some(b => b !== r && b.name.trim() === String(this.payload.name).trim())) return err('duplicate key value violates unique constraint', '23505');
             Object.assign(r, this.payload);
+            if (t === 'boards') r.has_anim = !!r.bg_anim;
           }
           else if (t === 'notifications') { if (Object.keys(this.payload).some(k => k !== 'read_at')) return err('permission denied for table notifications', '42501'); Object.assign(r, this.payload) }
           else if (t === 'profiles') {
@@ -370,6 +375,7 @@
     const v = db.invoices.find(x => x.id === +id);
     if (!v) throw new Error('الطلب غير موجود');
     if (!inBoard(v.board_id)) throw new Error('الطلب مو ضمن بورداتك');
+    if (v.deleted_at) throw new Error('الطلب بسلة المحذوفات — رجّعه أول');
     return v;
   }
   const blank = s => String(s ?? '').trim() === '';
@@ -516,12 +522,39 @@
       Object.assign(v, { delete_req_by: null, delete_req_at: null, delete_req_reason: null });
       addLog(v.id, has('admin') && !mine ? 'رفض طلب الحذف' : 'ألغى طلب الحذف'); return null;
     },
+    // 016: الحذف ينقل للسلة
     inv_delete({ p_id }) {
       if (!has('admin')) throw new Error('الحذف للأدمن فقط');
-      const v = getInvFor(p_id), path = v.pdf_path;
+      const v = getInvFor(p_id); if (v.deleted_at) throw new Error('الطلب غير موجود');
+      Object.assign(v, { deleted_at: iso(Date.now()), deleted_by: session }); addLog(v.id, 'نقل الطلب لسلة المحذوفات');
+      return null;
+    },
+    inv_restore({ p_id }) {
+      if (!has('admin')) throw new Error('الاسترجاع للأدمن فقط');
+      const v = db.invoices.find(x => x.id === +p_id); if (!v || !v.deleted_at) throw new Error('الطلب مو بسلة المحذوفات');
+      Object.assign(v, { deleted_at: null, deleted_by: null, delete_req_by: null, delete_req_at: null, delete_req_reason: null }); addLog(v.id, 'رجع الطلب من سلة المحذوفات');
+      return null;
+    },
+    inv_purge({ p_id }) {
+      if (!has('admin')) throw new Error('الحذف للأدمن فقط');
+      const v = db.invoices.find(x => x.id === +p_id); if (!v || !v.deleted_at) throw new Error('الطلب مو بسلة المحذوفات');
+      const cids = db.invoice_comments.filter(c => c.invoice_id === v.id).map(c => c.id);
+      db.comment_reactions = db.comment_reactions.filter(r => !cids.includes(r.comment_id));
       ['invoice_comments', 'invoice_log', 'invoice_stage_log', 'invoice_costs', 'notifications'].forEach(t => db[t] = db[t].filter(r => r.invoice_id !== v.id));
       db.invoices = db.invoices.filter(r => r.id !== v.id);
-      return path;
+      return v.pdf_path;
+    },
+    trash_list() {
+      if (!has('admin')) throw new Error('سلة المحذوفات للأدمن فقط');
+      return db.invoices.filter(i => i.deleted_at && inBoard(i.board_id)).sort((a, b) => a.deleted_at < b.deleted_at ? 1 : -1);
+    },
+    comment_react({ p_id, p_emoji }) {
+      if (!active()) throw new Error('الحساب غير مفعّل');
+      const c = db.invoice_comments.find(x => x.id === +p_id); if (!c || !readable('invoice_comments', c)) throw new Error('التعليق غير موجود');
+      if (!['👍', '❤️', '😂', '😮', '🙏', '✅'].includes(p_emoji)) throw new Error('violates check constraint "comment_reactions_emoji_chk"');
+      const k = db.comment_reactions.findIndex(r => r.comment_id === c.id && r.user_id === session && r.emoji === p_emoji);
+      if (k >= 0) { db.comment_reactions.splice(k, 1); return false }
+      db.comment_reactions.push({ comment_id: c.id, user_id: session, emoji: p_emoji, at: iso(Date.now()) }); return true;
     },
     board_stats() {
       const out = {};

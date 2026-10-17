@@ -54,8 +54,8 @@ async function step(fn, args, okMsg, id) {
 async function deleteInvoice(inv) {
   const r = await rpc('inv_delete', { p_id: inv.id });
   if (!r.ok) return;
-  if (r.data) await sb.storage.from('invoices').remove([r.data]);
-  closeDrawer(); await loadInvoices(); toast('انحذف الطلب #' + inv.id);
+  if (r.data) await sb.storage.from('invoices').remove([r.data]); // قبل 016 الحذف نهائي ويرجّع مسار الملف
+  closeDrawer(); await loadInvoices(); toast(r.data === null ? 'انتقل الطلب #' + inv.id + ' لسلة المحذوفات' : 'انحذف الطلب #' + inv.id);
 }
 
 // أهداف "نقل الطلب" (الأدمن والمدير) — "تمت" مو منها: تحتاج رقم مبيعات من المخزن
@@ -102,7 +102,7 @@ export const ACTIONS = {
       v => step('inv_set_board', { p_id: inv.id, p_board: +v.b }, 'انتقل الطلب لبورد ' + boardName(+v.b), inv.id), { okText: 'نقل' });
   },
   delete: inv => ask('حذف الطلب #' + inv.id, [], () => deleteInvoice(inv),
-    { okText: 'حذف نهائي', danger: true, msg: 'ينحذف الطلب وملفه وتعليقاته وسجله نهائياً، وما يرجع.' }),
+    { okText: 'حذف', danger: true, msg: 'ينتقل الطلب لسلة المحذوفات (تبويب "المحذوفات")، وتكدر ترجعه منها.' }),
 };
 
 // نقل مباشر بدون سؤال (السحب والإفلات للأدمن والمدير)

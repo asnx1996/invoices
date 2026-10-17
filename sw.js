@@ -1,7 +1,7 @@
 // Service worker: يخلي الموقع ينثبت كتطبيق ويفتح أسرع.
 // "الشبكة أولاً": دائماً ياخذ آخر نسخة، والمخزّن بس إذا ماكو إنترنت.
 // البيانات (Supabase) ما تنخزن هنا أبداً.
-const CACHE = 'invoices-v13-bg-fit';
+const CACHE = 'invoices-v14-trash';
 const SHELL = [
   './', 'index.html', 'assets/app.css', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png',
   'assets/js/main.js', 'assets/js/config.js', 'assets/js/util.js', 'assets/js/state.js', 'assets/js/api.js',
@@ -10,7 +10,7 @@ const SHELL = [
   'assets/js/appearance.js', 'assets/backgrounds/ledger.jpg', 'assets/backgrounds/midnight.jpg',
   'assets/brand/atlasplast-logo.png', 'assets/backgrounds/atlas-light.png', 'assets/backgrounds/atlas-dark.png',
   'assets/backgrounds/scene-anime.png', 'assets/backgrounds/scene-future.png', 'assets/backgrounds/scene-nature.png',
-  'assets/js/avatars.js', 'assets/js/notifications.js', 'assets/js/mentions.js', 'assets/js/home.js', 'assets/js/ssel.js',
+  'assets/js/avatars.js', 'assets/js/notifications.js', 'assets/js/mentions.js', 'assets/js/home.js', 'assets/js/ssel.js', 'assets/js/trash.js',
 ];
 
 self.addEventListener('install', e => {

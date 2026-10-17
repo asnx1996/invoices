@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://ripxxnmaadnpxocixbva.supabase.co wss://ripxxnmaadnpxocixbva.supabase.co; img-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://ripxxnmaadnpxocixbva.supabase.co wss://ripxxnmaadnpxocixbva.supabase.co; img-src 'self' data: blob:; media-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#1D4ED8">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -77,6 +77,7 @@
       <button class="tab hidden" data-view="reports" id="tabReports">التقارير</button>
       <button class="tab hidden" data-view="customers" id="tabCustomers">الزبائن</button>
       <button class="tab hidden" data-view="users" id="tabUsers">المستخدمين</button>
+      <button class="tab hidden" data-view="trash" id="tabTrash">المحذوفات</button>
     </nav>
     <div class="spacer"></div>
     <button class="btn sm hidden" id="installBtn"><svg class="i"><use href="#ic-download"/></svg>تثبيت التطبيق</button>
@@ -144,6 +145,16 @@
       </div>
       <p class="note">المندوب يختار الزبون من هاي القائمة. للاستيراد: ملف Excel بعمود <b>الاسم</b> (وعمود <b>الهاتف</b> اختياري). الأسماء المكررة تنتجاهل.</p>
       <div class="tbl-wrap"><table id="custTbl"></table></div>
+    </div>
+  </div>
+</main>
+
+<main tabindex="-1" id="viewTrash" class="hidden">
+  <div class="page wide">
+    <div class="panel">
+      <div class="page-head"><h3>سلة المحذوفات <span class="help" id="trashCount"></span></h3></div>
+      <p class="note">الطلب المحذوف يبقى هنا بملفه وتعليقاته وسجله. "استرجاع" يرجعه لمكانه بالبورد، و"حذف نهائي" يمسحه وما يرجع.</p>
+      <div class="tbl-wrap"><table id="trashTbl"></table></div>
     </div>
   </div>
 </main>

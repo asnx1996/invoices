@@ -14,8 +14,9 @@ import { initMentions } from './mentions.js';
 import { openAvatarPicker } from './avatars.js';
 import { initAppearance, applyLook } from './appearance.js';
 import { initHome, renderHome, refreshHome } from './home.js';
+import { initTrash, renderTrash } from './trash.js';
 
-const VIEWS = { home: '#viewHome', board: '#viewBoard', customers: '#viewCustomers', reports: '#viewReports', users: '#viewUsers' };
+const VIEWS = { home: '#viewHome', board: '#viewBoard', customers: '#viewCustomers', reports: '#viewReports', users: '#viewUsers', trash: '#viewTrash' };
 let view = 'board';
 let pendingInv = null; // رابط طلب (#inv-12) ينفتح بعد ما تتحمل البيانات
 let startHome = false; // فتح التطبيق بدون رابط: صفحة البوردات أول (إذا عنده أكثر من بورد)
@@ -34,6 +35,7 @@ function show(v, push = true) {
   if (v === 'users') renderUsers();
   if (v === 'customers') renderCustomers();
   if (v === 'reports') renderReports();
+  if (v === 'trash') renderTrash();
   if (v === 'home') { renderHome(); refreshHome() }
   $('#boardSel').classList.toggle('on-home', v === 'home');
   applyLook();
@@ -44,6 +46,7 @@ function onReady() {
   $('#tabUsers').classList.toggle('hidden', !can('users'));
   $('#tabCustomers').classList.toggle('hidden', !can('customers'));
   $('#tabReports').classList.toggle('hidden', !can('reports'));
+  $('#tabTrash').classList.toggle('hidden', !can('trash'));
   $('#newBtn').classList.toggle('hidden', !can('create'));
   $('#exportBtn').classList.toggle('hidden', !can('export'));
   $('#fRange').value = String(getRange());
@@ -107,7 +110,7 @@ $('#newBtn').onclick = () => {
   setTimeout(() => { const f = $('#f_customer_pick'); f && f.focus() }, 150);
 };
 
-initBoard(); initAppearance(); initDrawer(); initUsers(); initCustomers(); initReports(); initExport(); initNotifs(); initMentions();
+initBoard(); initAppearance(); initDrawer(); initUsers(); initCustomers(); initReports(); initExport(); initNotifs(); initMentions(); initTrash();
 $('#meBtn').onclick = () => openAvatarPicker();
 initAuth(onReady);
 

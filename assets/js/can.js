@@ -7,7 +7,7 @@ export function can(a, inv) {
   switch (a) {
     case 'create': return admin || rep;
     case 'export': return admin || acc || mgr;
-    case 'users': case 'customers': case 'backup': return admin;
+    case 'users': case 'customers': case 'backup': case 'trash': return admin;
     case 'reports': return admin || mgr;
     case 'editBasic': return admin || (inv.stage === 'new' && rep && own);
     case 'editValue': return admin || (inv.stage === 'new' && rep && own) || (inv.stage === 'acc' && acc);

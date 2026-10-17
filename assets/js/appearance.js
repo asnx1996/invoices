@@ -1,6 +1,6 @@
 import { $, toast } from './util.js';
 import { hasRole, getBoard } from './state.js';
-import { saveBoardLook } from './api.js';
+import { saveBoardLook, loadBoardAnim } from './api.js';
 
 const THEMES = [
   ['light', 'أزرق أطلس', 'هوية أطلس بلاست', '#0C5093', '#F4F6F9'],
@@ -65,7 +65,7 @@ let lookKey = '';
 const onHome = () => { const h = document.querySelector('#viewHome'); return !!h && !h.classList.contains('hidden') };
 
 function setLook(url, blur, fit) {
-  document.body.classList.toggle('has-bg', !!url);
+  document.body.classList.toggle('has-bg', !!url || document.body.classList.contains('has-anim'));
   document.body.classList.toggle('bg-contain', fit === 'contain');
   if (url) document.body.style.setProperty('--bg-img', `url("${url.startsWith('data:') ? url : new URL(url, document.baseURI).href}")`);
   else document.body.style.removeProperty('--bg-img');
@@ -73,14 +73,54 @@ function setLook(url, blur, fit) {
   document.body.classList.toggle('bg-blurred', blur > 0);
 }
 
+// خلفية متحركة (016): بس على الحاسبة، وما تشتغل إذا الجهاز طالب حركة أقل.
+// على الموبايل ما تنجاب أصلاً وتبقى الصورة الثابتة
+const desktop = matchMedia('(min-width: 1024px) and (hover: hover) and (pointer: fine)');
+const calm = matchMedia('(prefers-reduced-motion: reduce)');
+const animCache = new Map();   // رقم البورد ← data URL
+let animFor = null;
+
+function clearAnim() {
+  document.querySelector('.bg-anim')?.remove();
+  document.body.classList.remove('has-anim');
+  document.body.classList.toggle('has-bg', !!document.body.style.getPropertyValue('--bg-img'));
+}
+function showAnim(src, fit) {
+  const el = document.createElement(src.startsWith('data:video') ? 'video' : 'img');
+  el.className = 'bg-anim' + (fit === 'contain' ? ' contain' : '');
+  el.setAttribute('aria-hidden', 'true'); el.alt = '';
+  if (el.tagName === 'VIDEO') Object.assign(el, { muted: true, loop: true, autoplay: true, playsInline: true, disablePictureInPicture: true });
+  el.src = src;
+  document.body.prepend(el);
+  document.body.classList.add('has-anim', 'has-bg');
+}
+async function syncAnim(b) {
+  const want = b && b.has_anim && desktop.matches && !calm.matches ? b.id : null;
+  const el = document.querySelector('.bg-anim');
+  const fitChanged = !!el && el.classList.contains('contain') !== (b.bg_fit === 'contain');
+  if (want === animFor && !fitChanged) return;
+  animFor = want; clearAnim();
+  if (!want) return;
+  if (!animCache.has(want)) animCache.set(want, loadBoardAnim(want));   // نخزن الوعد: ما تنجاب مرتين
+  const src = await animCache.get(want);
+  if (animFor === want && src && !document.querySelector('.bg-anim')) showAnim(src, b.bg_fit);
+}
+document.addEventListener('visibilitychange', () => {
+  const v = document.querySelector('video.bg-anim'); if (!v) return;
+  document.hidden ? v.pause() : v.play().catch(() => { });
+});
+
 // تنادى بعد كل تغيير؛ ما تعيد الرسم إذا ما تغير شي
 export function applyLook() {
   const b = onHome() ? null : getBoard(), url = boardBgUrl(b), blur = b ? +b.blur || 0 : 0, fit = b && b.bg_fit;
+  syncAnim(b);
   const key = (url || '').slice(0, 64) + (url || '').length + '|' + blur + '|' + fit;
   if (key === lookKey) return;
   lookKey = key;
   setLook(url, blur, fit);
 }
+const relook = () => { animFor = undefined; lookKey = ''; applyLook() };
+desktop.addEventListener('change', relook); calm.addEventListener('change', relook);
 
 function syncChoices() {
   const b = getBoard(), admin = hasRole('admin') && !!b;
@@ -93,6 +133,9 @@ function syncChoices() {
   $('#customBackground').hidden = !b.bg_custom;
   $('#bgBlur').value = +b.blur || 0; $('#bgBlurV').textContent = (+b.blur || 0) + 'px';
   $('#bgFitRow').hidden = !('bg_fit' in b);
+  $('#animRow').hidden = !('has_anim' in b);
+  $('#animRemove').hidden = !b.has_anim;
+  $('#animState').textContent = b.has_anim ? 'مرفوعة ✓' : '';
   document.querySelectorAll('[name="bgFit"]').forEach(el => { el.checked = el.value === (b.bg_fit || 'cover') });
 }
 function openAppearance() { syncChoices(); $('#appearanceDialog').showModal() }
@@ -128,6 +171,9 @@ export function initAppearance() {
       <div class="fit-row" id="bgFitRow" role="radiogroup" aria-label="طريقة عرض الصورة">
         <label class="role-chk"><input type="radio" name="bgFit" value="cover">ملء الشاشة</label>
         <label class="role-chk"><input type="radio" name="bgFit" value="contain">إظهار الصورة كاملة</label></div>
+      <div class="anim-row" id="animRow"><span>خلفية متحركة <small class="help">(GIF أو فيديو قصير، تشتغل بس على الحاسبة)</small> <b id="animState"></b></span>
+        <button type="button" class="btn sm" id="animUpload">رفع</button><button type="button" class="btn sm bad" id="animRemove">إزالة</button>
+        <input type="file" id="animIn" accept="image/gif,image/webp,video/mp4,video/webm" class="hidden"></div>
       <label class="blur-row" for="bgBlur"><span>ضبابية الخلفية</span><input type="range" id="bgBlur" min="0" max="30" step="1" value="0"><output id="bgBlurV" for="bgBlur">0px</output></label>
       <div class="appearance-grid">${BACKGROUNDS.map(([id, title, url]) => `<label class="appearance-option"><input type="radio" name="appearanceBackground" value="${id}">${url ? `<img src="${url}" alt="" width="240" height="135" loading="lazy">` : '<span class="background-plain" aria-hidden="true"></span>'}<strong>${title}</strong></label>`).join('')}</div>
       <label class="appearance-system" id="customBackground"><input type="radio" name="appearanceBackground" value="custom"> الصورة المرفوعة</label></fieldset>
@@ -181,6 +227,28 @@ export function initAppearance() {
       syncChoices();
     } catch (err) { toast(err.message) }
     finally { button.disabled = false }
+  };
+  $('#animUpload').onclick = () => $('#animIn').click();
+  $('#animIn').onchange = async e => {
+    const file = e.target.files[0]; e.target.value = ''; if (!file) return;
+    const b = getBoard(); if (!b || !hasRole('admin')) return;
+    if (!/^(image\/(gif|webp)|video\/(mp4|webm))$/.test(file.type)) return toast('اختار GIF أو WebP أو فيديو MP4/WebM');
+    if (file.size > 5.5 * 1024 * 1024) return toast('الملف لازم يكون أصغر من 5.5 MB (فيديو قصير بدون صوت أفضل)');
+    const button = $('#animUpload'); button.disabled = true; toast('جاري رفع الخلفية المتحركة...');
+    try {
+      const data = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = () => no(new Error('ما انقرى الملف')); r.readAsDataURL(file) });
+      if (await saveBoardLook(b.id, { bg_anim: data })) {
+        delete b.bg_anim; b.has_anim = true; animCache.set(b.id, Promise.resolve(data)); relook();
+        toast(desktop.matches ? 'تغيرت الخلفية المتحركة للبورد' : 'انرفعت — تبين بس على شاشة الحاسبة');
+      }
+      syncChoices();
+    } catch (err) { toast(err.message) }
+    finally { button.disabled = false }
+  };
+  $('#animRemove').onclick = async () => {
+    const b = getBoard(); if (!b || !hasRole('admin')) return;
+    if (await saveBoardLook(b.id, { bg_anim: null })) { delete b.bg_anim; b.has_anim = false; animCache.delete(b.id); relook(); toast('انشالت الخلفية المتحركة') }
+    syncChoices();
   };
   scheme.addEventListener('change', () => { if (theme === 'system') applyTheme() });
   applyTheme(); applyLook();

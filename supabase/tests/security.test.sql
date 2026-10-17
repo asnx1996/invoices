@@ -275,6 +275,29 @@ begin
   perform pg_temp.t_ok('أدمن: يحذف طلب', format('select public.inv_delete(%s)', i_new2));
   perform pg_temp.t_eq('الحذف مسح التعليقات والسجل',
     format('select (select count(*) from public.invoices where id = %1$s) + (select count(*) from public.invoice_log where invoice_id = %1$s)', i_new2), '0');
+  -- سلة المحذوفات (016)
+  perform pg_temp.t_eq('سلة: المحذوف بالسلة', format('select count(*) from public.trash_list() where id = %s', i_new2), '1');
+  perform pg_temp.t_denied('سلة: ما ينحذف مرتين', format('select public.inv_delete(%s)', i_new2));
+  perform pg_temp.t_denied('سلة: إجراء على طلب بالسلة يترفض', format('select public.inv_set_urgent(%s, true)', i_new2));
+  perform pg_temp.t_eq('سلة: ما يدخل بالتقارير', format('select count(*) from public.inv_profits(array[%s]::bigint[])', i_new2), '0');
+  perform pg_temp.as_owner();
+  perform pg_temp.t_eq('سلة: ما يوصل عنه إشعار', format('select public.user_can_see_invoice(%L, %s)::text', u_rep2, i_new2), 'false');
+  perform pg_temp.as_user(u_rep2);
+  perform pg_temp.t_eq('سلة: المندوب ما يشوفه', format('select count(*) from public.invoices where id = %s', i_new2), '0');
+  perform pg_temp.t_denied('سلة: غير الأدمن ما يشوف السلة', 'select * from public.trash_list()');
+  perform pg_temp.t_denied('سلة: غير الأدمن ما يرجّع', format('select public.inv_restore(%s)', i_new2));
+  perform pg_temp.t_denied('سلة: غير الأدمن ما يحذف نهائي', format('select public.inv_purge(%s)', i_new2));
+  perform pg_temp.as_user(u_admin);
+  perform pg_temp.t_ok('سلة: الأدمن يرجّعه', format('select public.inv_restore(%s)', i_new2));
+  perform pg_temp.as_user(u_rep2);
+  perform pg_temp.t_eq('سلة: بعد الاسترجاع المندوب يشوفه', format('select count(*) from public.invoices where id = %s', i_new2), '1');
+  perform pg_temp.as_user(u_admin);
+  perform pg_temp.t_denied('سلة: الحذف النهائي بس من السلة', format('select public.inv_purge(%s)', i_new2));
+  perform pg_temp.t_ok('سلة: نقل للسلة مرة ثانية', format('select public.inv_delete(%s)', i_new2));
+  perform pg_temp.t_eq('سلة: الحذف النهائي يرجّع الملف', format('select public.inv_purge(%s)', i_new2), 'p');
+  perform pg_temp.as_owner();
+  perform pg_temp.t_eq('سلة: انحذف نهائياً', format('select count(*) from public.invoices where id = %s', i_new2), '0');
+  perform pg_temp.as_user(u_admin);
   perform pg_temp.t_ok('أدمن: يسوي مستخدم بدورين', $q$select public.admin_create_user('zz.test.new', 'password123', 'zz جديد', '{rep,acc}')$q$);
   perform pg_temp.as_owner();
   select id into new_user from public.profiles where full_name = 'zz جديد';
@@ -506,6 +529,21 @@ begin
     format($q$select public.comment_edit((select max(id) from public.invoice_comments where invoice_id = %s and not is_system), 'x')$q$, i_new3));
   perform pg_temp.t_denied('تعليق: غيره ما يحذفه',
     format($q$select public.comment_delete((select max(id) from public.invoice_comments where invoice_id = %s and not is_system))$q$, i_new3));
+  -- تفاعلات (016)
+  perform pg_temp.t_eq('تفاعل: المحاسب يضيف',
+    format($q$select public.comment_react((select max(id) from public.invoice_comments where invoice_id = %s and not is_system), '👍')::text$q$, i_new3), 'true');
+  perform pg_temp.t_eq('تفاعل: ينحسب', format($q$select count(*) from public.comment_reactions r join public.invoice_comments c on c.id = r.comment_id where c.invoice_id = %s$q$, i_new3), '1');
+  perform pg_temp.t_denied('تفاعل: إيموجي غريب يترفض',
+    format($q$select public.comment_react((select max(id) from public.invoice_comments where invoice_id = %s and not is_system), 'x')$q$, i_new3));
+  perform pg_temp.t_denied('تفاعل: ما يضيف مباشرة',
+    format($q$insert into public.comment_reactions (comment_id, user_id, emoji) select max(id), %L, '❤️' from public.invoice_comments where invoice_id = %s$q$, u_acc, i_new3));
+  perform pg_temp.as_user(u_wh);
+  perform pg_temp.t_denied('تفاعل: المخزن ما يتفاعل على طلب ما يشوفه',
+    format($q$select public.comment_react((select max(id) from public.invoice_comments where invoice_id = %s and not is_system), '👍')$q$, i_new3));
+  perform pg_temp.as_user(u_acc);
+  perform pg_temp.t_eq('تفاعل: ضغطة ثانية تشيله',
+    format($q$select public.comment_react((select max(id) from public.invoice_comments where invoice_id = %s and not is_system), '👍')::text$q$, i_new3), 'false');
+  perform pg_temp.t_eq('تفاعل: انشال', format($q$select count(*) from public.comment_reactions r join public.invoice_comments c on c.id = r.comment_id where c.invoice_id = %s$q$, i_new3), '0');
   perform pg_temp.as_user(u_rep1);
   perform pg_temp.t_ok('تعليق: صاحبه يحذفه',
     format($q$select public.comment_delete((select max(id) from public.invoice_comments where invoice_id = %s and not is_system))$q$, i_new3));
@@ -574,6 +612,9 @@ begin
   perform pg_temp.t_ok('خلفية: الأدمن يغيرها', $q$update public.boards set bg = 'ledger', blur = 8 where id = 1$q$, 1);
   perform pg_temp.t_denied('خلفية: ضبابية أكثر من 30 ترفض', 'update public.boards set blur = 50 where id = 1');
   perform pg_temp.t_denied('خلفية: رابط خارجي يرفض', $q$update public.boards set bg_custom = 'https://x.y/a.png' where id = 1$q$);
+  perform pg_temp.t_ok('خلفية متحركة: الأدمن يرفع GIF', $q$update public.boards set bg_anim = 'data:image/gif;base64,R0lG' where id = 1$q$, 1);
+  perform pg_temp.t_eq('خلفية متحركة: has_anim', 'select has_anim::text from public.boards where id = 1', 'true');
+  perform pg_temp.t_denied('خلفية متحركة: نوع غريب يرفض', $q$update public.boards set bg_anim = 'data:text/html;base64,PGg+' where id = 1$q$);
 
   perform pg_temp.as_user(u_rep1);
   perform pg_temp.t_ok('إشعارات: المندوب يختار المنشن بس', $q$select public.set_notif_level('mention')$q$);
