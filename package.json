@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node tests/run-db-tests.mjs"
+    "test": "node --test tests/background-media.test.mjs && node tests/run-db-tests.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8"

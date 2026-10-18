@@ -1,3 +1,4 @@
+import { ANIM_ACCEPT, animatedMediaBlob } from './background-media.js';
 import { $, toast } from './util.js';
 import { hasRole, getBoard } from './state.js';
 import { saveBoardLook, loadBoardAnim } from './api.js';
@@ -90,6 +91,11 @@ function showAnim(src, fit) {
   el.className = 'bg-anim' + (fit === 'contain' ? ' contain' : '');
   el.setAttribute('aria-hidden', 'true'); el.alt = '';
   if (el.tagName === 'VIDEO') Object.assign(el, { muted: true, loop: true, autoplay: true, playsInline: true, disablePictureInPicture: true });
+  if (el.tagName === 'VIDEO') el.addEventListener('error', () => {
+    if (!el.isConnected) return;
+    clearAnim();
+    toast('الفيديو مرفوع بس المتصفح ما يكدر يشغّل ترميزه. جرّب MP4 بترميز H.264 أو WebM.');
+  }, { once: true });
   el.src = src;
   document.body.prepend(el);
   document.body.classList.add('has-anim', 'has-bg');
@@ -97,7 +103,7 @@ function showAnim(src, fit) {
 async function syncAnim(b) {
   const want = b && b.has_anim && desktop.matches && !calm.matches ? b.id : null;
   const el = document.querySelector('.bg-anim');
-  const fitChanged = !!el && el.classList.contains('contain') !== (b.bg_fit === 'contain');
+  const fitChanged = !!el && el.classList.contains('contain') !== (b?.bg_fit === 'contain');
   if (want === animFor && !fitChanged) return;
   animFor = want; clearAnim();
   if (!want) return;
@@ -171,9 +177,9 @@ export function initAppearance() {
       <div class="fit-row" id="bgFitRow" role="radiogroup" aria-label="طريقة عرض الصورة">
         <label class="role-chk"><input type="radio" name="bgFit" value="cover">ملء الشاشة</label>
         <label class="role-chk"><input type="radio" name="bgFit" value="contain">إظهار الصورة كاملة</label></div>
-      <div class="anim-row" id="animRow"><span>خلفية متحركة <small class="help">(GIF أو فيديو قصير، تشتغل بس على الحاسبة)</small> <b id="animState"></b></span>
-        <button type="button" class="btn sm" id="animUpload">رفع</button><button type="button" class="btn sm bad" id="animRemove">إزالة</button>
-        <input type="file" id="animIn" accept="image/gif,image/webp,video/mp4,video/webm" class="hidden"></div>
+      <div class="anim-row" id="animRow"><span>خلفية متحركة <small class="help">(MP4 / WebM / GIF / WebP — لحد 5.5 MB، للحاسبة فقط)</small> <b id="animState"></b></span>
+        <button type="button" class="btn sm" id="animUpload">رفع فيديو أو صورة متحركة</button><button type="button" class="btn sm bad" id="animRemove">إزالة</button>
+        <input type="file" id="animIn" accept="${ANIM_ACCEPT}" class="hidden"></div>
       <label class="blur-row" for="bgBlur"><span>ضبابية الخلفية</span><input type="range" id="bgBlur" min="0" max="30" step="1" value="0"><output id="bgBlurV" for="bgBlur">0px</output></label>
       <div class="appearance-grid">${BACKGROUNDS.map(([id, title, url]) => `<label class="appearance-option"><input type="radio" name="appearanceBackground" value="${id}">${url ? `<img src="${url}" alt="" width="240" height="135" loading="lazy">` : '<span class="background-plain" aria-hidden="true"></span>'}<strong>${title}</strong></label>`).join('')}</div>
       <label class="appearance-system" id="customBackground"><input type="radio" name="appearanceBackground" value="custom"> الصورة المرفوعة</label></fieldset>
@@ -232,11 +238,10 @@ export function initAppearance() {
   $('#animIn').onchange = async e => {
     const file = e.target.files[0]; e.target.value = ''; if (!file) return;
     const b = getBoard(); if (!b || !hasRole('admin')) return;
-    if (!/^(image\/(gif|webp)|video\/(mp4|webm))$/.test(file.type)) return toast('اختار GIF أو WebP أو فيديو MP4/WebM');
-    if (file.size > 5.5 * 1024 * 1024) return toast('الملف لازم يكون أصغر من 5.5 MB (فيديو قصير بدون صوت أفضل)');
     const button = $('#animUpload'); button.disabled = true; toast('جاري رفع الخلفية المتحركة...');
     try {
-      const data = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = () => no(new Error('ما انقرى الملف')); r.readAsDataURL(file) });
+      const media = await animatedMediaBlob(file);
+      const data = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = () => no(new Error('ما انقرى الملف')); r.readAsDataURL(media) });
       if (await saveBoardLook(b.id, { bg_anim: data })) {
         delete b.bg_anim; b.has_anim = true; animCache.set(b.id, Promise.resolve(data)); relook();
         toast(desktop.matches ? 'تغيرت الخلفية المتحركة للبورد' : 'انرفعت — تبين بس على شاشة الحاسبة');
