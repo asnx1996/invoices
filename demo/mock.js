@@ -637,7 +637,7 @@
       if (p_user !== session && !has('admin')) throw new Error('ما عندك صلاحية');
       if (p_avatar && !/^[a-z0-9-]{1,24}$/.test(p_avatar)) throw new Error('صورة غير معروفة');
       const p = db.profiles.find(x => x.id === p_user); if (!p) throw new Error('المستخدم غير موجود');
-      p.avatar = p_avatar || null; return null;
+      p.avatar = p_avatar || null; if(p_user === session) p.avatar_chosen = true; return null;
     },
     admin_list_logins() {
       if (!has('admin')) throw new Error('للأدمن فقط');
@@ -650,7 +650,7 @@
       if ((p_password || '').length < 8) throw new Error('الرمز لازم 8 أحرف على الأقل');
       if (!p_roles || !p_roles.length) throw new Error('لازم دور واحد على الأقل');
       const id = 'u-' + Math.random().toString(36).slice(2, 9);
-      db.profiles.push({ id, full_name: p_full_name, roles: p_roles, role: p_roles[0], active: true, created_at: iso(Date.now()) });
+      db.profiles.push({ id, avatar_chosen: false, full_name: p_full_name, roles: p_roles, role: p_roles[0], active: true, created_at: iso(Date.now()) });
       db.logins[id] = p_username;
       (p_boards && p_boards.length ? p_boards : [1]).forEach(b => { if (db.boards.some(x => x.id === +b)) db.board_members.push({ board_id: +b, user_id: id }) });
       return id;

@@ -707,3 +707,14 @@ body.has-bg .home-title,body.has-bg .home-sub{display:inline-block;background:co
 body.has-anim::before{display:none}
 .anim-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 12px}
 .anim-row>span{flex:1;min-width:12em}
+
+/* مكتبة الأفاتارات: 50 شخصية محلية */
+.avatar-preview{display:flex;align-items:center;gap:14px;margin:14px 0;font-weight:600}
+.avatar-preview .avatar{margin:0}
+.avatar-collections{max-height:min(440px,52vh);overflow:auto;padding:4px;overscroll-behavior:contain}
+.avatar-collection h4{margin:18px 4px 8px;font-size:14px;color:var(--faint)}
+.avatar-collection .av-grid{max-height:none;overflow:visible}
+.av-opt:focus-visible{outline:3px solid var(--primary);outline-offset:2px}
+.av-opt:active{transform:scale(.96)}
+.av-initials[aria-pressed="true"]{border-color:var(--primary);background:var(--primary-soft)}
+@media(prefers-reduced-motion:reduce){.av-opt{transition:none}.av-opt:hover,.av-opt:active{transform:none}}

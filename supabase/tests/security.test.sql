@@ -645,6 +645,19 @@ begin
   perform pg_temp.t_eq('إشعارات: المهمة = الإرجاع والاكتمال ودورك',
     format($q$select string_agg(coalesce(data->>'stage', kind), ',' order by id) from public.notifications where user_id = %L$q$, u_rep1), 'new,done,turn');
 
+  -- 017: اختيار صورة الحساب الجديد
+  perform pg_temp.as_owner();
+  perform pg_temp.t_eq('الصورة: الحساب الجديد يحتاج اختيار', format('select avatar_chosen::text from public.profiles where id = %L', new_user), 'false');
+  update public.profiles set avatar_chosen = false where id = u_rep1;
+  perform pg_temp.as_user(u_admin);
+  perform pg_temp.t_ok('الصورة: الأدمن يختار من المجموعة الجديدة', format($q$select public.set_avatar(%L, 'space-10')$q$, u_rep1));
+  perform pg_temp.t_eq('الصورة: تعديل الأدمن لا يلغي ترحيب المستخدم', format('select avatar_chosen::text from public.profiles where id = %L', u_rep1), 'false');
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_denied('الصورة: رقم خارج المجموعة مرفوض', $q$select public.set_avatar(auth.uid(), 'robot-11')$q$);
+  perform pg_temp.t_ok('الصورة: المستخدم يختار الحروف', $q$select public.set_avatar(auth.uid(), null)$q$);
+  perform pg_temp.t_eq('الصورة: الحروف تكمل اختيار أول دخول', 'select avatar_chosen::text from public.profiles where id = auth.uid()', 'true');
+  perform pg_temp.t_ok('الصورة: المستخدم يغير رأيه لاحقاً', $q$select public.set_avatar(auth.uid(), 'animal-10')$q$);
+
   -- ---------------- النتيجة ----------------
   perform pg_temp.as_owner();
   msg := current_setting('tst.fail', true);

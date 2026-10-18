@@ -2,7 +2,7 @@ import { LOGIN_DOMAIN } from './config.js';
 import { S, rolesText } from './state.js';
 import { sb, configured, loadAll, subscribe, unsubscribe } from './api.js';
 import { $, esc } from './util.js';
-import { paintMe } from './avatars.js';
+import { paintMe, openAvatarPicker } from './avatars.js';
 import { loadNotifs, subscribeNotifs, unsubscribeNotifs, dropPush } from './notifications.js';
 
 const loginEmail = u => { u = u.trim().toLowerCase(); return u.includes('@') ? u : u + LOGIN_DOMAIN };
@@ -31,6 +31,7 @@ async function boot(onReady) {
     paintMe();
     subscribe();
     loadNotifs(); subscribeNotifs();
+    if (S.ME.avatar_chosen === false) openAvatarPicker(S.ME.id, true);
   } finally { booting = false }
 }
 
