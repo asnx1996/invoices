@@ -30,3 +30,6 @@ mkdirSync(u('./dist/assets/backgrounds/'), { recursive: true });
 mkdirSync(u('./dist/assets/brand/'), { recursive: true });
 for (const f of readdirSync(u('../assets/brand/'))) copyFileSync(u('../assets/brand/' + f), u('./dist/assets/brand/' + f));
 for (const f of readdirSync(u('../assets/backgrounds/'))) copyFileSync(u('../assets/backgrounds/' + f), u('./dist/assets/backgrounds/' + f));
+
+mkdirSync(u('./dist/assets/avatars/'), { recursive: true });
+for (const f of readdirSync(u('../assets/avatars/'))) copyFileSync(u('../assets/avatars/' + f), u('./dist/assets/avatars/' + f));

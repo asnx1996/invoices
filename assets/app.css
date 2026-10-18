@@ -718,3 +718,5 @@ body.has-anim::before{display:none}
 .av-opt:active{transform:scale(.96)}
 .av-initials[aria-pressed="true"]{border-color:var(--primary);background:var(--primary-soft)}
 @media(prefers-reduced-motion:reduce){.av-opt{transition:none}.av-opt:hover,.av-opt:active{transform:none}}
+
+.avatar-art{display:block;width:100%;height:100%;background-size:500% 200%;background-repeat:no-repeat;border-radius:inherit}
