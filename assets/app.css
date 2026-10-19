@@ -738,3 +738,14 @@ body.has-anim::before{display:none}
 @media(prefers-reduced-motion:reduce){.av-opt{transition:none}.av-opt:hover,.av-opt:active{transform:none}}
 
 .avatar-art{display:block;width:100%;height:100%;background-size:500% 200%;background-repeat:no-repeat;border-radius:inherit}
+
+/* سماء النجوم (خلفية بورد "stars"): تدرج ليلي + 3 طبقات نجوم تطلع لفوق */
+.bg-stars{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none;background:radial-gradient(ellipse at bottom,#1B2735 0%,#090A0F 100%)}
+.bg-stars i{position:absolute;top:0;left:0;background:transparent;box-shadow:var(--stars);animation:starRise 50s linear infinite}
+.bg-stars i::after{content:"";position:absolute;top:2000px;left:0;width:inherit;height:inherit;background:transparent;box-shadow:var(--stars)}
+.bg-stars .s1{width:1px;height:1px}
+.bg-stars .s2{width:2px;height:2px;animation-duration:100s}
+.bg-stars .s3{width:3px;height:3px;animation-duration:150s}
+@keyframes starRise{from{transform:translateY(0)}to{transform:translateY(-2000px)}}
+body.has-stars{background:#090A0F}
+.background-stars{background:radial-gradient(1px 1px at 20% 30%,#fff,transparent),radial-gradient(1px 1px at 70% 60%,#fff,transparent),radial-gradient(1.5px 1.5px at 45% 80%,#fff,transparent),radial-gradient(1px 1px at 85% 20%,#fff,transparent),radial-gradient(1.5px 1.5px at 10% 75%,#fff,transparent),radial-gradient(ellipse at bottom,#1B2735,#090A0F)!important}
