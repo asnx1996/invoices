@@ -10,7 +10,7 @@ export function renderHome() {
     const url = boardBgUrl(b), st = S.STATS[b.id] || {};
     const cur = b.id === S.board;
     return `<button type="button" class="home-card${cur ? ' cur' : ''}" data-board="${b.id}"${cur ? ' aria-current="true"' : ''}>
-      <span class="hc-img${b.bg === 'stars' ? ' background-stars' : ''}"${url ? ` style="background-image:url('${esc(url)}')"` : ''}></span>
+      <span class="hc-img${b.bg === 'stars' ? ' background-stars' : b.bg === 'stars-day' ? ' background-stars-day' : ''}"${url ? ` style="background-image:url('${esc(url)}')"` : ''}></span>
       <span class="hc-body"><strong>${esc(b.name)}</strong>
         <span class="hc-meta">${st.active != null ? `<span>${+st.active} شغالة</span>${+st.late ? `<span class="hc-late">${ic('clock')}${+st.late} متأخرة</span>` : ''}` : '&nbsp;'}</span></span></button>`;
   };

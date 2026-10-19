@@ -752,11 +752,30 @@ body.has-anim::before{display:none}
 
 /* سماء النجوم (خلفية بورد "stars"): تدرج ليلي + 3 طبقات نجوم تطلع لفوق */
 .bg-stars{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none;background:radial-gradient(ellipse at bottom,#1B2735 0%,#090A0F 100%)}
-.bg-stars i{position:absolute;top:0;left:0;background:transparent;box-shadow:var(--stars);animation:starRise 50s linear infinite}
+.bg-stars i{position:absolute;top:0;left:0;color:#fff;background:transparent;box-shadow:var(--stars);animation:starRise 50s linear infinite}
 .bg-stars i::after{content:"";position:absolute;top:2000px;left:0;width:inherit;height:inherit;background:transparent;box-shadow:var(--stars)}
 .bg-stars .s1{width:1px;height:1px}
 .bg-stars .s2{width:2px;height:2px;animation-duration:100s}
 .bg-stars .s3{width:3px;height:3px;animation-duration:150s}
+/* سماء النهار: نفس النجوم والحركة على تدرج فاتح، والنجوم زرقاء رمادية حتى تبين */
+.bg-stars.day{background:radial-gradient(ellipse at bottom,#DCEAF8 0%,#F7FAFE 100%)}
+.bg-stars.day i{color:#7E9BBE}
+.bg-stars.day .s1{opacity:.75}
+/* سماء النهار تثبّت الثيم الفاتح حتى لو الجهاز داكن */
+body.has-stars-day{
+  --bg:#F7FAFE; --surface:#FFFFFF; --surface-2:#F8FAFC; --col:#EBF1F8;
+  --text:#0F172A; --muted:#475569; --faint:#5B6B81; --border:#DCE4EE;
+  --primary:#0C5093; --primary-fg:#FFFFFF; --primary-soft:#DFEFF9;
+  --ok:#15803D; --ok-soft:#DCFCE7; --ok-fg:#FFFFFF; --warn:#B45309; --warn-soft:#FEF3C7;
+  --bad:#B91C1C; --bad-soft:#FEE2E2; --bad-fg:#FFFFFF; --vio:#6D28D9; --vio-soft:#EDE9FE;
+  --urgent:#DC2626; --urgent-soft:#FEE2E2; --urgent-fg:#FFFFFF;
+  --shadow:0 1px 2px rgba(15,23,42,.06),0 1px 3px rgba(15,23,42,.08); --shadow-lg:0 10px 30px rgba(15,23,42,.18);
+  --shadow-card:0 0 0 1px rgba(15,23,42,.08),0 1px 2px rgba(15,23,42,.06),0 2px 6px -2px rgba(15,23,42,.08);
+  color-scheme:light;background:#F7FAFE;color:var(--text)
+}
+body.has-stars-day header{background:rgba(255,255,255,.78)}
+body.has-stars-day .column{background:rgba(235,241,248,.72)}
+.background-stars-day{background:radial-gradient(1px 1px at 20% 30%,#7E9BBE,transparent),radial-gradient(1.5px 1.5px at 70% 60%,#7E9BBE,transparent),radial-gradient(2px 2px at 45% 80%,#7E9BBE,transparent),radial-gradient(1px 1px at 85% 20%,#7E9BBE,transparent),radial-gradient(1.5px 1.5px at 10% 75%,#7E9BBE,transparent),radial-gradient(ellipse at bottom,#DCEAF8,#F7FAFE)!important}
 @keyframes starRise{from{transform:translateY(0)}to{transform:translateY(-2000px)}}
 body.has-stars{background:#090A0F}
 .background-stars{background:radial-gradient(1px 1px at 20% 30%,#fff,transparent),radial-gradient(1px 1px at 70% 60%,#fff,transparent),radial-gradient(1.5px 1.5px at 45% 80%,#fff,transparent),radial-gradient(1px 1px at 85% 20%,#fff,transparent),radial-gradient(1.5px 1.5px at 10% 75%,#fff,transparent),radial-gradient(ellipse at bottom,#1B2735,#090A0F)!important}

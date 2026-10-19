@@ -24,6 +24,7 @@ const BACKGROUNDS = [
   ['atlas-light', 'أطلس · انسياب أزرق', 'assets/backgrounds/atlas-light.png'],
   ['atlas-dark', 'أطلس · أزرق ليلي', 'assets/backgrounds/atlas-dark.png'],
   ['stars', 'سماء النجوم · متحركة', null],
+  ['stars-day', 'سماء النهار · متحركة', null],
   ['none', 'خلفية سادة', null],
   ['ledger', 'مكتب الحسابات', 'assets/backgrounds/ledger.jpg'],
   ['midnight', 'دفاتر المساء', 'assets/backgrounds/midnight.jpg'],
@@ -68,13 +69,15 @@ let lookKey = '';
 const onHome = () => { const h = document.querySelector('#viewHome'); return !!h && !h.classList.contains('hidden') };
 
 // سماء النجوم (Uiverse · jaykdoe): ثلاث طبقات نجوم (box-shadow) تطلع لفوق بسرعات مختلفة — CSS بس، تشتغل حتى على الموبايل
-function syncStars(on) {
+// mode: 'night' (ألوان الواجهة داكنة متناسقة) أو 'day' (الواجهة تبقى فاتحة) أو null
+function syncStars(mode) {
   let el = document.querySelector('.bg-stars');
-  document.body.classList.toggle('has-stars', on);
-  if (!on) return el && el.remove();
-  if (el) return;
+  document.body.classList.toggle('has-stars', mode === 'night');
+  document.body.classList.toggle('has-stars-day', mode === 'day');
+  if (!mode) return el && el.remove();
+  if (el) return el.classList.toggle('day', mode === 'day');
   el = document.createElement('div');
-  el.className = 'bg-stars'; el.setAttribute('aria-hidden', 'true');
+  el.className = 'bg-stars' + (mode === 'day' ? ' day' : ''); el.setAttribute('aria-hidden', 'true');
   STARS.forEach((shadow, i) => {
     const layer = document.createElement('i');
     layer.className = 's' + (i + 1); layer.style.setProperty('--stars', shadow);
@@ -103,7 +106,7 @@ let animFor = null;
 function clearAnim() {
   document.querySelector('.bg-anim')?.remove();
   document.body.classList.remove('has-anim');
-  document.body.classList.toggle('has-bg', !!document.body.style.getPropertyValue('--bg-img') || document.body.classList.contains('has-stars'));
+  document.body.classList.toggle('has-bg', !!document.body.style.getPropertyValue('--bg-img') || !!document.querySelector('.bg-stars'));
 }
 function showAnim(src, fit) {
   const el = document.createElement(src.startsWith('data:video') ? 'video' : 'img');
@@ -138,7 +141,7 @@ document.addEventListener('visibilitychange', () => {
 // تنادى بعد كل تغيير؛ ما تعيد الرسم إذا ما تغير شي
 export function applyLook() {
   const b = onHome() ? null : getBoard(), url = boardBgUrl(b), blur = b ? +b.blur || 0 : 0, fit = b && b.bg_fit;
-  const stars = ((b && b.bg) || DEFAULT_BG) === 'stars';
+  const id = (b && b.bg) || DEFAULT_BG, stars = id === 'stars' ? 'night' : id === 'stars-day' ? 'day' : null;
   syncAnim(b);
   const key = (url || '').slice(0, 64) + (url || '').length + '|' + blur + '|' + fit + '|' + stars;
   if (key === lookKey) return;
@@ -201,7 +204,7 @@ export function initAppearance() {
         <button type="button" class="btn sm" id="animUpload">رفع فيديو أو صورة متحركة</button><button type="button" class="btn sm bad" id="animRemove">إزالة</button>
         <input type="file" id="animIn" accept="${ANIM_ACCEPT}" class="hidden"></div>
       <label class="blur-row" for="bgBlur"><span>ضبابية الخلفية</span><input type="range" id="bgBlur" min="0" max="30" step="1" value="0"><output id="bgBlurV" for="bgBlur">0px</output></label>
-      <div class="appearance-grid">${BACKGROUNDS.map(([id, title, url]) => `<label class="appearance-option"><input type="radio" name="appearanceBackground" value="${id}">${url ? `<img src="${url}" alt="" width="240" height="135" loading="lazy">` : `<span class="background-plain${id === 'stars' ? ' background-stars' : ''}" aria-hidden="true"></span>`}<strong>${title}</strong></label>`).join('')}</div>
+      <div class="appearance-grid">${BACKGROUNDS.map(([id, title, url]) => `<label class="appearance-option"><input type="radio" name="appearanceBackground" value="${id}">${url ? `<img src="${url}" alt="" width="240" height="135" loading="lazy">` : `<span class="background-plain${id === 'stars' ? ' background-stars' : id === 'stars-day' ? ' background-stars-day' : ''}" aria-hidden="true"></span>`}<strong>${title}</strong></label>`).join('')}</div>
       <label class="appearance-system" id="customBackground"><input type="radio" name="appearanceBackground" value="custom"> الصورة المرفوعة</label></fieldset>
     <fieldset><legend>ألوان مساحة العمل</legend><div class="appearance-grid">${THEMES.map(([id, title, subtitle, accent, bg]) => `<label class="appearance-option"><input type="radio" name="appearanceTheme" value="${id}"><span class="theme-sample" style="--sample-bg:${bg};--sample-accent:${accent}" aria-hidden="true"><i></i><i></i><i></i></span><strong>${title}</strong><small>${subtitle}</small></label>`).join('')}</div><label class="appearance-system"><input type="radio" name="appearanceTheme" value="system"> حسب إعدادات الجهاز</label></fieldset>
     </div>
