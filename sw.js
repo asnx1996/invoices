@@ -1,14 +1,14 @@
 // Service worker: يخلي الموقع ينثبت كتطبيق ويفتح أسرع.
 // "الشبكة أولاً": دائماً ياخذ آخر نسخة، والمخزّن بس إذا ماكو إنترنت.
 // البيانات (Supabase) ما تنخزن هنا أبداً.
-const CACHE = 'invoices-v22-two-skies';
+const CACHE = 'invoices-v23-progress-logo';
 const SHELL = [
   'assets/avatars/people-3d.webp', 'assets/avatars/pixel-3d.webp', 'assets/avatars/robot-3d.webp', 'assets/avatars/animal-3d.webp', 'assets/avatars/space-3d.webp',
-  './', 'index.html', 'assets/app.css', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png',
+  './', 'index.html', 'assets/app.css', 'manifest.webmanifest', 'icons/progress-48.png', 'icons/progress-512.png', 'icons/progress-maskable-512.png', 'icons/progress-apple-180.png', 'icons/progress-192.png',
   'assets/js/main.js', 'assets/js/config.js', 'assets/js/util.js', 'assets/js/state.js', 'assets/js/api.js',
   'assets/js/can.js', 'assets/js/actions.js', 'assets/js/auth.js', 'assets/js/board.js', 'assets/js/drawer.js',
   'assets/js/users.js', 'assets/js/customers.js', 'assets/js/reports.js', 'assets/js/export.js', 'assets/js/backup.js',
-  'assets/js/appearance.js', 'assets/brand/atlasplast-logo.png',
+  'assets/js/appearance.js', 'assets/brand/invoice-progress.png',
   'assets/js/avatars.js', 'assets/js/avatar-art.js', 'assets/js/notifications.js', 'assets/js/mentions.js', 'assets/js/home.js', 'assets/js/ssel.js', 'assets/js/trash.js', 'assets/js/stars-data.js',
 ];
 
@@ -41,7 +41,7 @@ self.addEventListener('push', e => {
     // الموقع قدامه: الجرس والتوست يكفون
     if (list.some(c => c.visibilityState === 'visible' && c.focused)) return;
     return self.registration.showNotification(d.title || 'فواتير المبيعات', {
-      body: d.body || '', tag: d.tag, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', dir: 'rtl', lang: 'ar', data: { inv: d.inv },
+      body: d.body || '', tag: d.tag, icon: 'icons/progress-192.png', badge: 'icons/progress-192.png', dir: 'rtl', lang: 'ar', data: { inv: d.inv },
     });
   }));
 });

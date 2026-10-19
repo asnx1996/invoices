@@ -434,11 +434,11 @@ tr.off td{opacity:.55}
 .barcell span{font-variant-numeric:tabular-nums;font-size:13px;color:var(--muted);white-space:nowrap}
 .install{display:none}
 
-/* Atlasplast: original brand artwork and quiet, finite motion. */
-.brand-image{width:76px;height:44px;object-fit:contain;background:#fff;border-radius:6px;padding:3px;flex:none}
+/* Invoice progress brand and quiet, finite motion. */
+.brand-image{width:48px;height:48px;object-fit:contain;flex:none}
 .auth-card{padding:30px;border-radius:22px;box-shadow:0 24px 70px -24px #0c509366}
 .auth-brand{display:flex;flex-direction:column;align-items:center;gap:12px;margin-bottom:26px;padding-bottom:22px;border-bottom:1px solid var(--border)}
-.auth-brand img{width:172px;height:100px;object-fit:contain;background:#fff;border-radius:10px}
+.auth-brand img{width:144px;height:144px;object-fit:contain}
 .auth-brand span{font-size:11px;color:var(--muted)}
 @media(hover:hover) and (prefers-reduced-motion:no-preference){
   .card:not(.dragging):hover{translate:0 -2px}
@@ -450,7 +450,7 @@ tr.off td{opacity:.55}
   .auth-card .fld{animation:atlasReveal .55s .16s var(--ease-out) both}
   @keyframes atlasReveal{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 }
-@media(max-width:640px){.brand{font-size:15px}.brand-image{width:62px;height:38px}.auth-card{padding:24px}}
+@media(max-width:640px){.brand{font-size:15px}.brand-image{width:40px;height:40px}.auth-card{padding:24px}}
 
 /* ---------- البوردات: الصفحة الأولى، الخلفية، رأس البورد (013) ---------- */
 .board-sel.on-home{display:none}

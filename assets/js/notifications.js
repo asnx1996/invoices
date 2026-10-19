@@ -138,7 +138,7 @@ export async function loadNotifs() {
 // تنبيه الجهاز: بس إذا الصفحة مو قدامه (وإلا يكفي التوست)
 function sysNotify(n) {
   if (!('Notification' in window) || Notification.permission !== 'granted' || !document.hidden) return;
-  const opts = { body: text(n), icon: 'icons/icon-192.png', tag: 'n' + n.id, dir: 'rtl', lang: 'ar', data: { inv: n.invoice_id } };
+  const opts = { body: text(n), icon: 'icons/progress-192.png', tag: 'n' + n.id, dir: 'rtl', lang: 'ar', data: { inv: n.invoice_id } };
   const fallback = () => { try { const x = new Notification('فواتير المبيعات', opts); x.onclick = () => { focus(); openInv(n.invoice_id); x.close() } } catch (e) { } };
   if (navigator.serviceWorker && navigator.serviceWorker.controller)
     navigator.serviceWorker.ready.then(r => r.showNotification('فواتير المبيعات', opts)).catch(fallback);
