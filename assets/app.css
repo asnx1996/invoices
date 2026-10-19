@@ -328,6 +328,14 @@ td select{min-height:36px;border:1px solid var(--border);border-radius:8px;backg
 .note{font-size:13px;color:var(--muted);background:var(--primary-soft);border-radius:8px;padding:10px 12px}
 .perm td,.perm th{text-align:center}
 .perm td:first-child,.perm th:first-child{text-align:start}
+.perm-edit td:first-child{min-width:220px}
+.perm-edit td:first-child .help{font-weight:400;margin-top:2px}
+.perm-role{display:flex;flex-direction:column;align-items:center;gap:4px;white-space:nowrap}
+
+.perm-del{width:28px;height:28px;border-color:transparent;background:transparent;color:var(--faint)}
+.perm-chk{width:20px;height:20px;accent-color:var(--primary);cursor:pointer}
+.perm-all{color:var(--ok)}
+.req-grid{display:grid;gap:14px}
 
 /* Toast */
 .toast{position:fixed;bottom:max(18px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;z-index:60;opacity:0;transition:opacity .2s var(--ease),transform .4s var(--ease-out);pointer-events:none;max-width:calc(100% - 24px);box-shadow:var(--shadow-lg)}
@@ -355,7 +363,7 @@ main:focus{outline:none}
 @media (max-width:640px){
   .bar{padding:8px 12px}.toolbar,.stats,.board-wrap{padding-left:12px;padding-right:12px}
   .tabs{margin:0}.grid{grid-template-columns:1fr}
-  .column{width:84vw;max-height:none}
+  .column{width:auto;max-height:none}
   .who{width:100%}.who select{flex:1}
   .notif-pop{inset-inline-end:12px;width:calc(100vw - 24px)}
   /* iOS يكبّر الصفحة إذا خط الحقل أصغر من 16px */
@@ -365,10 +373,20 @@ main:focus{outline:none}
 main:not(.hidden){animation:viewIn .28s var(--ease-out)}
 @keyframes viewIn{from{opacity:0;transform:translateY(6px)}}
 
+/* الموبايل: المراحل عمودية، كل مرحلة قائمة منسدلة (board.js → .m-col) */
+.m-head{display:flex;align-items:center;gap:10px;width:100%;min-height:54px;padding:12px 14px;border:0;border-radius:12px;background:transparent;color:inherit;font:inherit;text-align:start;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.m-head .dot{width:10px;height:10px;border-radius:50%;flex:none}
+.m-head h2{font-size:15px;margin:0;font-weight:700;flex:1;min-width:0}
+.m-head .count{font-size:13px;background:var(--surface);border-radius:999px;padding:2px 10px;color:var(--muted);font-weight:600;font-variant-numeric:tabular-nums}
+.m-head svg.i{color:var(--faint);transition:transform .2s var(--ease)}
+.m-col.open .m-head svg.i{transform:rotate(180deg)}
+.m-head:active{background:color-mix(in srgb,var(--surface) 60%,transparent)}
+.m-col .col-body{overflow:visible;min-height:0;padding-bottom:12px}
+.mc-body[hidden]{display:none}
 @media (max-width:640px){
-  /* الأعمدة تثبت على حافتها عند التمرير الأفقي */
-  .board-wrap{scroll-snap-type:x proximity;scroll-padding-inline:12px}
-  .column{scroll-snap-align:start}
+  .board-wrap{overflow-x:visible}
+  .board{flex-direction:column;align-items:stretch;min-width:0;gap:8px}
+  .column{width:auto;max-height:none}
 }
 
 /* تقليل الحركة: تلاشي خفيف بدل الانزلاق والتكبير */

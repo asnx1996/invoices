@@ -658,6 +658,52 @@ begin
   perform pg_temp.t_eq('الصورة: الحروف تكمل اختيار أول دخول', 'select avatar_chosen::text from public.profiles where id = auth.uid()', 'true');
   perform pg_temp.t_ok('الصورة: المستخدم يغير رأيه لاحقاً', $q$select public.set_avatar(auth.uid(), 'animal-10')$q$);
 
+  -- 018: صلاحيات يتحكم بيها الأدمن + أدوار جديدة + الحقول الاختيارية
+  perform pg_temp.as_user(u_mgr);
+  perform pg_temp.t_denied('صلاحيات: المدير ما يعدل الأدوار', $q$update public.role_defs set perms = perms || '{users}' where key = 'mgr'$q$);
+  perform pg_temp.t_denied('صلاحيات: المدير ما يشوف المحذوفات افتراضياً', 'select * from public.trash_list()');
+  perform pg_temp.t_denied('صلاحيات: المدير ما يضيف حسابات افتراضياً', $q$select public.admin_create_user('zz.m1', '12345678', 'x', '{rep}')$q$);
+  perform pg_temp.as_user(u_admin);
+  perform pg_temp.t_ok('صلاحيات: الأدمن ينطي المدير المستخدمين والمحذوفات والزبائن',
+    $q$update public.role_defs set perms = perms || '{users,trash,customers}' where key = 'mgr'$q$, 1);
+  perform pg_temp.t_denied('صلاحيات: صلاحية مو معروفة ترفض', $q$update public.role_defs set perms = '{hack}' where key = 'rep'$q$);
+  perform pg_temp.t_denied('صلاحيات: ما ينحذف دور أساسي', $q$delete from public.role_defs where key = 'rep'$q$);
+  perform pg_temp.t_ok('أدوار: الأدمن يسوي دور جديد', $q$insert into public.role_defs (key, name, perms) values ('r_sup', 'مشرف', '{see_all,reports}')$q$, 1);
+  perform pg_temp.t_denied('أدوار: ما يسوي دور أساسي', $q$insert into public.role_defs (key, name, perms, builtin) values ('r_x', 'س', '{}', true)$q$);
+  perform pg_temp.as_user(u_mgr);
+  perform pg_temp.t_ok('صلاحيات: المدير صار يشوف المحذوفات', 'select * from public.trash_list()');
+  perform pg_temp.t_ok('صلاحيات: المدير صار يضيف زبون', $q$insert into public.customers (name) values ('zz-test من المدير')$q$, 1);
+  perform pg_temp.t_ok('أدوار: المدير يضيف حساب بدور جديد',
+    $q$select public.admin_create_user('zz.sup', '12345678', 'zz sup', '{}', null, '{r_sup}')$q$);
+  perform pg_temp.t_denied('أدوار: المدير ما ينطي دور أدمن', $q$select public.admin_create_user('zz.adm2', '12345678', 'x', '{admin}')$q$);
+  perform pg_temp.t_denied('أدوار: دور غير معرّف يرفض', $q$select public.admin_create_user('zz.bad', '12345678', 'x', '{}', null, '{r_none}')$q$);
+  perform pg_temp.t_denied('صلاحيات: المدير ما يغير رمز الأدمن', format('select public.admin_set_password(%L, %L)', u_admin, 'hacked123'));
+  perform pg_temp.t_ok('صلاحيات: المدير يغير رمز موظف', format('select public.admin_set_password(%L, %L)', u_rep2, 'newpass123'));
+  perform pg_temp.t_denied('صلاحيات: المدير ما يوقف الأدمن', format('update public.profiles set active = false where id = %L', u_admin));
+  perform pg_temp.t_denied('صلاحيات: المدير ما يرقي نفسه', format($q$update public.profiles set roles = '{mgr,acc}' where id = %L$q$, u_mgr));
+  perform pg_temp.t_ok('صلاحيات: المدير يغير أدوار موظف', format($q$update public.profiles set roles = '{rep,wh}' where id = %L$q$, u_rep2), 1);
+  perform pg_temp.t_eq('أدوار: الدور الجديد بس ما يضيف مندوب', $q$select roles::text from public.profiles where full_name = 'zz sup'$q$, '{}');
+  perform pg_temp.as_user((select id from public.profiles where full_name = 'zz sup'));
+  perform pg_temp.t_denied('أدوار: المشرف ما ينشئ طلب', 'insert into public.invoices (rep_id) values (auth.uid())');
+  perform pg_temp.t_eq('أدوار: المشرف يشوف كل طلبات البورد', format('select count(*) from public.invoices where id in (%s, %s)', i_new1, i_new2), '2');
+  perform pg_temp.t_ok('أدوار: المشرف يشوف التقارير', 'select public.report_summary(current_date - 30, current_date)');
+  perform pg_temp.t_denied('أدوار: المشرف ما يوافق', format('select public.inv_approve(%s)', i_dec));
+  perform pg_temp.as_user(u_admin);
+  perform pg_temp.t_ok('أدوار: حذف الدور', $q$delete from public.role_defs where key = 'r_sup'$q$, 1);
+  perform pg_temp.t_eq('أدوار: الدور المحذوف ينشال من المستخدمين',
+    $q$select cardinality(xroles)::text from public.profiles where full_name = 'zz sup'$q$, '0');
+
+  -- الحقول الاختيارية
+  perform pg_temp.as_owner();
+  insert into public.invoices (rep_id, customer_id, quote_no, value) values (u_rep1, c1, 'Q-opt', 10) returning id into i_new2;
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_denied('إلزامية: بدون PDF ما ينرسل', format('select public.inv_send_to_acc(%s)', i_new2));
+  perform pg_temp.as_user(u_admin);
+  perform pg_temp.t_ok('إلزامية: الأدمن يخلي الـ PDF اختياري',
+    $q$insert into public.app_settings (key, value) values ('opt_fields', 'pdf') on conflict (key) do update set value = excluded.value$q$, 1);
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_ok('إلزامية: ينرسل بدون PDF', format('select public.inv_send_to_acc(%s)', i_new2));
+
   -- ---------------- النتيجة ----------------
   perform pg_temp.as_owner();
   msg := current_setting('tst.fail', true);

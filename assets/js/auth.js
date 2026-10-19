@@ -1,6 +1,6 @@
 import { LOGIN_DOMAIN } from './config.js';
 import { S, rolesText } from './state.js';
-import { sb, configured, loadAll, subscribe, unsubscribe } from './api.js';
+import { sb, configured, loadAll, loadRoleDefs, subscribe, unsubscribe } from './api.js';
 import { $, esc } from './util.js';
 import { paintMe, openAvatarPicker } from './avatars.js';
 import { loadNotifs, subscribeNotifs, unsubscribeNotifs, dropPush } from './notifications.js';
@@ -21,10 +21,11 @@ async function boot(onReady) {
       authMsg('حسابك موقوف أو لسه ما مفعّل. راجع الأدمن.');
       showAuth(); await sb.auth.signOut(); return;
     }
-    S.ME = { ...prof, roles: prof.roles && prof.roles.length ? prof.roles : [prof.role] };
+    S.ME = { ...prof, roles: prof.roles && (prof.roles.length || (prof.xroles || []).length) ? prof.roles : [prof.role] };
+    await loadRoleDefs(); // التبويبات والأزرار حسب صلاحيات الأدوار
     $('#authView').classList.add('hidden'); $('#appView').classList.remove('hidden');
     $('#meName').textContent = S.ME.full_name || user.email;
-    $('#rolePill').textContent = rolesText(S.ME.roles);
+    $('#rolePill').textContent = rolesText(S.ME.roles, S.ME.xroles);
     paintMe();
     onReady();
     await loadAll();

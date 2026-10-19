@@ -1,4 +1,4 @@
-import { S, BOARD_COLS, colKey, MONTHS, getInv, userName, reps, isActive, isUrgent, ageLevel, daysIn, hasRole, getBoard } from './state.js';
+import { S, BOARD_COLS, colKey, MONTHS, getInv, userName, reps, isActive, isUrgent, ageLevel, daysIn, hasPerm, getBoard } from './state.js';
 import { $, $$, esc, num, money, pct, ic, toast, ask } from './util.js';
 import { avatarHTML } from './avatars.js';
 import { can } from './can.js';
@@ -14,6 +14,9 @@ const sortBy = load('ib_sort', {});              // عمود → نوع التر
 let allOpen = !!load('ib_open', false);          // كل الكروت مفتوحة؟
 const flipped = new Set();                       // كروت عكس الوضع العام (للجلسة فقط)
 let lateOnly = false;                            // بطاقة "متأخرة" فوق تشتغل كفلتر
+// الموبايل: المراحل وحدة تحت الثانية، وكل مرحلة قائمة تنفتح وتنسد (بدل التمرير الأفقي)
+const narrow = matchMedia('(max-width: 640px)');
+const mOpen = new Set(load('ib_mopen', []));
 const isOpen = id => allOpen !== flipped.has(id);
 
 // وين واكف الطلب
@@ -39,7 +42,7 @@ function byProfit(a, b, dir) {
   const x = S.PROFITS[a.id], y = S.PROFITS[b.id];
   return !x || !y ? !x - !y : dir * (num(x.net_pct) - num(y.net_pct));
 }
-const seesProfit = () => hasRole('admin') || hasRole('mgr');
+const seesProfit = () => hasPerm('see_profit');
 
 function filtered() {
   const q = $('#q').value.trim().toLowerCase(), rep = $('#fRep').value, st = $('#fStage').value;
@@ -118,6 +121,14 @@ export function renderBoard() {
     // الطارئة دائماً فوق، وبعدها الترتيب اللي اختاره
     const items = list.filter(i => colKey(i) === c.k).sort((x, y) => isUrgent(y) - isUrgent(x) || cmp(x, y));
     const urg = items.filter(isUrgent).length;
+    if (narrow.matches) {
+      const open = mOpen.has(c.k);
+      return `<section class="column m-col${open ? ' open' : ''}" data-col="${c.k}">
+      <button type="button" class="m-head" aria-expanded="${open}" aria-controls="mb-${c.k}">
+        <span class="dot" style="background:${c.c}"></span><h2>${c.t}</h2>${urg ? `<span class="urg-dot" title="${urg} طارئ"></span>` : ''}<span class="count">${items.length}</span>${ic('chev')}</button>
+      <div class="mc-body" id="mb-${c.k}" ${open ? '' : 'hidden'}>${open ? `<div class="col-sub"><span>${c.who}</span>${sortSelect(c.k)}</div>
+        <div class="col-body">${items.map(cardHTML).join('') || '<div class="empty">لا توجد طلبات</div>'}</div>` : ''}</div></section>`;
+    }
     if (folded.has(c.k)) return `<section class="column folded" data-col="${c.k}">
       <button type="button" class="col-fold" aria-expanded="false" aria-label="فتح عمود ${c.t}" title="فتح العمود">
         <span class="dot" style="background:${c.c}"></span><span class="count">${items.length}</span>${urg ? `<span class="urg-dot" title="${urg} طارئ"></span>` : ''}<h2>${c.t}</h2></button></section>`;
@@ -155,9 +166,9 @@ export function fillFilters() {
   const cur = $('#fRep').value || 'all';
   $('#fRep').innerHTML = '<option value="all">كل المندوبين</option>' + reps().map(r => `<option value="${esc(r.id)}">${esc(r.full_name)}</option>`).join('');
   $('#fRep').value = [...$('#fRep').options].some(o => o.value === cur) ? cur : 'all';
-  $('#fRep').classList.toggle('hidden', !(hasRole('admin') || hasRole('acc') || hasRole('mgr') || hasRole('wh')));
+  $('#fRep').classList.toggle('hidden', !(hasPerm('see_all') || hasPerm('see_late')));
   const st = $('#fStage').value || 'all';
-  const opts = hasRole('admin') ? [...STAGE_OPTS, ['del', 'طلبات الحذف']] : STAGE_OPTS;
+  const opts = can('trash') ? [...STAGE_OPTS, ['del', 'طلبات الحذف']] : STAGE_OPTS;
   $('#fStage').innerHTML = opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
   $('#fStage').value = opts.some(o => o[0] === st) ? st : 'all';
   syncExpandBtn();
@@ -166,6 +177,7 @@ export function fillFilters() {
 const syncExpandBtn = () => $('#expandAll').setAttribute('aria-pressed', String(allOpen));
 
 export function initBoard() {
+  narrow.addEventListener('change', renderBoard);
   searchSelect($('#fRep'), 'ابحث عن مندوب...');
   searchSelect($('#fStage'), 'ابحث عن حالة...');
   ['#q', '#fRep', '#fStage'].forEach(s => $(s).addEventListener('input', renderBoard));
@@ -180,6 +192,13 @@ export function initBoard() {
     sortBy[s.dataset.sort] = s.value; keep('ib_sort', sortBy); renderBoard();
   });
   $('#board').addEventListener('click', e => {
+    const mh = e.target.closest('.m-head');
+    if (mh) {
+      const k = mh.closest('.column').dataset.col;
+      mOpen.has(k) ? mOpen.delete(k) : mOpen.add(k); keep('ib_mopen', [...mOpen]); renderBoard();
+      const b = $(`.column[data-col="${k}"] .m-head`); b && b.focus({ preventScroll: true });
+      return;
+    }
     const f = e.target.closest('.col-fold');
     if (f) {
       const k = f.closest('.column').dataset.col;

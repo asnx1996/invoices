@@ -7,6 +7,7 @@ const body = src.slice(src.indexOf('<body>') + 6, src.indexOf('</body>'));
 const keep = head.split('\n').filter(l =>
   /fonts\.g|assets\/app\.css|xlsx/.test(l) && !/supabase/.test(l)).join('\n');
 const out = `<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>فواتير المبيعات التجريبية</title>
 ${keep}
 <link rel="stylesheet" href="demo.css">

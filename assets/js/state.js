@@ -51,14 +51,57 @@ export const MONTHS = { 1: 'شهر', 2: 'شهرين', 3: '3 أشهر' };
 export const POINT_RATE = 1.5;   // كل نقطة = 1.5%
 
 export const hasRole = r => !!S.ME && S.ME.roles.includes(r);
-export const rolesText = roles => (roles || []).map(r => ROLES[r] || r).join(' + ');
+
+// الصلاحيات اللي الأدمن يوزعها على الأدوار (018). الأدمن عنده كلشي دائماً
+export const PERMS = {
+  create: ['إنشاء طلبات ومتابعة طلباته', 'يسوي طلب، يعدله، يرسله للحسابات، ويأشر رد الزبون لطلباته'],
+  acc: ['شغل الحسابات', 'السداد والنقل والكلفة، الإرسال للقرار، والإرجاع للمندوب'],
+  approve: ['موافقة المدير', 'يوافق على الشروط أو يرجع الطلب للحسابات'],
+  cust_all: ['رد الزبون لكل الطلبات', 'يأشر موافقة أو رفض الزبون على أي طلب'],
+  complete: ['تحويل المخزن', 'يدخل رقم المبيعات ويكمل الطلب'],
+  move: ['نقل الطلب لأي مرحلة', 'السحب والإفلات بين الأعمدة بدون الخطوات'],
+  urgent_all: ['علامة طارئ لكل الطلبات', ''],
+  see_all: ['يشوف كل الطلبات', 'بدونها يشوف طلباته بس'],
+  see_late: ['يشوف طلبات القرار والمكتملة', 'مثل المخزن'],
+  see_profit: ['يشوف الربح', 'من مرحلة القرار وبعدها، بدون سعر الكلفة'],
+  reports: ['تبويب التقارير', ''],
+  export: ['تصدير Excel', ''],
+  customers: ['تبويب الزبائن', 'إضافة وتعديل وحذف الزبائن'],
+  users: ['تبويب المستخدمين', 'إضافة حسابات وتغيير الأدوار والرموز (ما يلمس الأدمن)'],
+  trash: ['الحذف والمحذوفات', 'يحذف الطلبات ويسترجعها من السلة'],
+};
+// نفس الافتراضي بـ 018 — يستخدم قبل ما تتشغل
+export const DEFAULT_ROLE_DEFS = [
+  { key: 'rep', name: 'مندوب', builtin: true, perms: ['create'] },
+  { key: 'acc', name: 'محاسب', builtin: true, perms: ['acc', 'see_all', 'export'] },
+  { key: 'mgr', name: 'مدير', builtin: true, perms: ['approve', 'cust_all', 'complete', 'move', 'urgent_all', 'see_all', 'see_profit', 'reports', 'export'] },
+  { key: 'wh', name: 'مخزن', builtin: true, perms: ['complete', 'see_late'] },
+];
+S.ROLEDEFS = DEFAULT_ROLE_DEFS;
+S.HAS_ROLEDEFS = false;   // 018 متشغل؟
+
+// الحقول اللي الأدمن يكدر يخليها اختيارية (app_settings.opt_fields)
+export const REQ_FIELDS = {
+  customer: ['الزبون (من القائمة)', 'new'], ref: ['رقم عرض السعر أو رقم الحجز', 'new'], value: ['قيمة الفاتورة', 'new'],
+  pdf: ['ملف الـ PDF', 'new'], payment: ['طريقة السداد', 'acc'], payer: ['النقل', 'acc'], cost: ['سعر الكلفة', 'acc'],
+};
+S.OPT = new Set();
+export const isReq = k => !S.OPT.has(k);
+
+const roleKeys = p => [...(p.roles || []), ...(p.xroles || [])];
+// صلاحية من الأدوار بس (بدون استثناء الأدمن): منو "مندوب" مثلاً
+export const roleHas = (p, perm) => !!p && S.ROLEDEFS.some(d => roleKeys(p).includes(d.key) && d.perms.includes(perm));
+export const userHas = (p, perm) => !!p && ((p.roles || []).includes('admin') || roleHas(p, perm));
+export const hasPerm = perm => userHas(S.ME, perm);
+export const roleName = k => k === 'admin' ? ROLES.admin : (S.ROLEDEFS.find(d => d.key === k) || {}).name || ROLES[k] || k;
+export const rolesText = (roles, xroles) => [...(roles || []), ...(xroles || [])].map(roleName).join(' + ');
 export const userName = id => (S.PROFILES.find(p => p.id === id) || {}).full_name || '—';
 // الأدمن بكل البوردات؛ الباقين حسب الأدمن يحددهم (012)
 export const inBoard = (p, b = S.board) => !S.BOARDS || (p.roles || []).includes('admin') || S.MEMBERS.some(m => m.board_id === b && m.user_id === p.id);
 export const getBoard = (id = S.board) => (S.BOARDS || []).find(b => b.id === id) || null;
 export const NOTIF_LEVELS = { all: 'كل الإشعارات', important: 'المهمة بس', mention: 'المنشن بس', none: 'بدون إشعارات' };
 export const boardName = id => ((S.BOARDS || []).find(b => b.id === id) || {}).name || '';
-export const reps = () => S.PROFILES.filter(p => p.active && (p.roles || []).includes('rep') && inBoard(p));
+export const reps = () => S.PROFILES.filter(p => p.active && roleHas(p, 'create') && inBoard(p));
 // 'draft' = طلب جديد لسه ما انحفظ بالقاعدة (ما يطلع باللوحة لحد الحفظ)
 export const getInv = id => id === 'draft' ? S.draft : S.INVOICES.find(i => i.id === +id);
 export const daysIn = inv => (Date.now() - new Date(inv.stage_at).getTime()) / DAY;

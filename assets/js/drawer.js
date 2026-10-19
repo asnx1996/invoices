@@ -1,4 +1,4 @@
-import { S, COLS, SUB, PAY, PAY_LEGACY, PAYER, PAYER_LEGACY, MONTHS, POINT_RATE, hasRole, getInv, userName, reps, isActive, isUrgent,
+import { S, COLS, SUB, PAY, PAY_LEGACY, PAYER, PAYER_LEGACY, MONTHS, POINT_RATE, hasRole, isReq, getInv, userName, reps, isActive, isUrgent,
   ldAmount, transportAdded, totalAfterTransport, pointsPct, discPct, onChange, NOTIF_LEVELS } from './state.js';
 import { renderBoard } from './board.js';
 import { $, esc, num, fmt, money, pct, dt, dOnly, ic, toast, ask, cur, rate, numAttrs, numVal } from './util.js';
@@ -152,10 +152,10 @@ function valueFld(inv, eb) {
   const vc = extra.valCur ?? (filled(inv.value) && inv.value ? 'usd' : '');
   const pick = `<div class="fld"><label for="f_valcur">عملة الفاتورة <span class="req">*</span></label>
     <select id="f_valcur" data-valcur="1"><option value="">— اختر —</option>${[['usd', 'دولار'], ['iqd', 'دينار']].map(([k, t]) => `<option value="${k}" ${vc === k ? 'selected' : ''}>${t}</option>`).join('')}</select></div>`;
-  if (!vc) return pick + `<div class="fld"><label for="f_value">قيمة الفاتورة <span class="req">*</span></label><input ${numAttrs} id="f_value" disabled placeholder="اختار العملة أول"></div>`;
-  if (vc === 'usd') return pick + fld(`قيمة الفاتورة (${cur()})`, 'value', inv.value, { type: 'number', req: true, rer: true, help });
+  if (!vc) return pick + `<div class="fld"><label for="f_value">قيمة الفاتورة${isReq('value') ? ' <span class="req">*</span>' : ''}</label><input ${numAttrs} id="f_value" disabled placeholder="اختار العملة أول"></div>`;
+  if (vc === 'usd') return pick + fld(`قيمة الفاتورة (${cur()})`, 'value', inv.value, { type: 'number', req: isReq('value'), rer: true, help });
   const conv = extra.iqd ? `= ${money(inv.value)} (سعر الصرف ${fmt(rate())})` : `تنقسم على سعر الصرف ${fmt(rate())} وتنحفظ بالدولار`;
-  return pick + `<div class="fld${pendingHas('value') ? ' chg' : ''}"><label for="f_value">قيمة الفاتورة (دينار) <span class="req">*</span></label>
+  return pick + `<div class="fld${pendingHas('value') ? ' chg' : ''}"><label for="f_value">قيمة الفاتورة (دينار)${isReq('value') ? ' <span class="req">*</span>' : ''}</label>
     <input ${numAttrs} id="f_value" data-iqd="1" value="${esc(numVal(extra.iqd))}"><div class="help">${conv}${help ? ' · ' + help : ''}</div>${pendingHas('value') ? wasHTML('value') : ''}</div>`;
 }
 const tog = (label, col, val, dis) => `<label class="toggle${pendingHas(col) ? ' chg' : ''}" for="f_${col}"><input type="checkbox" id="f_${col}" data-f="${col}" data-rer="1" ${val ? 'checked' : ''} ${dis ? 'disabled' : ''}>${label}${pendingHas(col) ? `<span class="was">قبل: <b>${esc(wasText(col))}</b></span>` : ''}</label>`;
@@ -173,7 +173,7 @@ function deleteReqHTML(inv) {
   const btn = (a, label, cls) => can(a, inv) ? `<button class="btn sm ${cls}" data-act="${a}">${label}</button>` : '';
   const mine = inv.delete_req_by === S.ME.id;
   return `<div class="warnbox">${ic('trash')} <b>طلب حذف</b> من ${esc(userName(inv.delete_req_by))} — ${dOnly(inv.delete_req_at)}<br>السبب: ${esc(inv.delete_req_reason)}
-    <div class="row">${btn('delete', 'حذف', 'bad')}${hasRole('admin') ? btn('cancelDeleteReq', mine ? 'إلغاء الطلب' : 'رفض طلب الحذف', '') : mine ? btn('cancelDeleteReq', 'إلغاء طلبي', '') : ''}</div></div>`;
+    <div class="row">${btn('delete', 'حذف', 'bad')}${can('trash') ? btn('cancelDeleteReq', mine ? 'إلغاء الطلب' : 'رفض طلب الحذف', '') : mine ? btn('cancelDeleteReq', 'إلغاء طلبي', '') : ''}</div></div>`;
 }
 
 function actionsHTML(inv) {
@@ -199,7 +199,7 @@ function actionsHTML(inv) {
 function customerFld(inv, dis) {
   if (dis) return `<div class="fld full"><label>اسم الزبون</label><input type="text" value="${esc(inv.customer)}" disabled></div>`;
   const warn = !inv.customer_id ? `<div class="help" style="color:var(--bad)">${filled(inv.customer) ? 'الاسم مو من القائمة — ' : ''}اختار الزبون من القائمة</div>` : '<div class="help">اكتب جزء من الاسم واختار من القائمة</div>';
-  return `<div class="fld full${pendingHas('customer') ? ' chg' : ''}"><label for="f_customer_pick">اسم الزبون <span class="req">*</span></label>
+  return `<div class="fld full${pendingHas('customer') ? ' chg' : ''}"><label for="f_customer_pick">اسم الزبون${isReq('customer') ? ' <span class="req">*</span>' : ''}</label>
     <input type="search" id="f_customer_pick" list="custList" value="${esc(inv.customer)}" autocomplete="off" placeholder="ابحث عن الزبون...">
     <datalist id="custList">${S.CUSTOMERS.filter(c => c.active).map(c => `<option value="${esc(c.name)}">`).join('')}</datalist>${warn}${pendingHas('customer') ? wasHTML('customer') : ''}</div>`;
 }
@@ -207,10 +207,10 @@ function customerFld(inv, dis) {
 function costFld(inv) {
   if (!can('setCost', inv)) return '';
   const chg = h => extra.pendingCost != null ? h.replace('class="fld ', 'class="fld chg ').replace(/<\/div>$/, `<div class="was">${ic('back')}قبل: <b>${S.COSTS[inv.id] != null ? esc(fmt(S.COSTS[inv.id])) : 'فارغ'}</b></div></div>`) : h;
-  if (hasRole('admin')) return chg(fld(`سعر الكلفة (${cur()}) — للأدمن فقط`, 'cost', extra.pendingCost ?? S.COSTS[inv.id] ?? '', { type: 'number', req: true, help: 'ما يظهر لأي أحد غيرك' }).replace('data-f="cost"', 'data-cost="1"'));
+  if (hasRole('admin')) return chg(fld(`سعر الكلفة (${cur()}) — للأدمن فقط`, 'cost', extra.pendingCost ?? S.COSTS[inv.id] ?? '', { type: 'number', req: isReq('cost'), help: 'ما يظهر لأي أحد غيرك' }).replace('data-f="cost"', 'data-cost="1"'));
   if (inv.cost_set && !extra.costEdit)
     return `<div class="fld"><label>سعر الكلفة</label><div class="cost-set">${ic('check')}مسجّل (مخفي) <button class="btn sm" data-costedit="1">تغيير</button></div></div>`;
-  return fld(`سعر الكلفة (${cur()})`, 'cost', extra.pendingCost ?? '', { type: 'number', req: true, help: 'بعد الحفظ يختفي ومحد يشوفه غير الأدمن' }).replace('data-f="cost"', 'data-cost="1"');
+  return fld(`سعر الكلفة (${cur()})`, 'cost', extra.pendingCost ?? '', { type: 'number', req: isReq('cost'), help: 'بعد الحفظ يختفي ومحد يشوفه غير الأدمن' }).replace('data-f="cost"', 'data-cost="1"');
 }
 
 function termsHTML(inv) {
@@ -220,9 +220,9 @@ function termsHTML(inv) {
   const tr = transportAdded(inv);
   return `<section class="blk"><h4>السداد والنقل ${et ? `<span class="lock">${ic('lock')}يعدلها المحاسب</span>` : ''}</h4>
     <div class="grid">
-      ${fld('طريقة السداد', 'payment', inv.payment, { opts: payOpts, req: true, dis: et, rer: true })}
+      ${fld('طريقة السداد', 'payment', inv.payment, { opts: payOpts, req: isReq('payment'), dis: et, rer: true })}
       ${inv.payment === 'credit' ? fld('مدة الآجل', 'credit_months', inv.credit_months, { opts: MONTHS, req: true, dis: et, rer: true }) : '<div></div>'}
-      ${fld('النقل', 'payer', inv.payer, { opts: payerOpts, req: true, dis: et, rer: true })}
+      ${fld('النقل', 'payer', inv.payer, { opts: payerOpts, req: isReq('payer'), dis: et, rer: true })}
       ${inv.payer === 'customer' ? fld(`أجور النقل (${cur()})`, 'transport_amt', inv.transport_amt, { type: 'number', req: true, dis: et, rer: true, help: 'تنضاف على قيمة الفاتورة' }) : '<div></div>'}
       <div class="fld full"><div class="help">الإجمالي بعد النقل: <b>${money(totalAfterTransport(inv))}</b>${tr ? ` (${money(inv.value)} + ${money(tr)})` : ''}</div></div>
       ${fld('عدد النقاط', 'points', inv.points, { type: 'number', dis: et, rer: true, help: `نسبة النقاط: ${fmt(pointsPct(inv))}% (النقطة = ${POINT_RATE}%)` })}
@@ -361,7 +361,7 @@ export function renderDrawer() {
         ${valueFld(inv, eb)}
         ${discHTML(inv, !can('editValue', inv))}
         ${hasRole('admin') && inv.stage === 'new' ? fld('المندوب', 'rep_id', inv.rep_id, { opts: Object.fromEntries(reps().map(r => [r.id, r.full_name])), rer: true }) : `<div class="fld"><label>المندوب</label><input type="text" value="${esc(userName(inv.rep_id))}" disabled></div>`}
-        <div class="fld full"><label>ملف الفاتورة PDF <span class="req">*</span></label>
+        <div class="fld full"><label>ملف الفاتورة PDF${isReq('pdf') ? ' <span class="req">*</span>' : ''}</label>
           <div class="pdf">${ic('file')}<span class="name" title="${esc(inv.pdf_name || '')}">${inv.pdf_path || inv.pdf_name ? esc(inv.pdf_name || 'ملف') + ' · ' + Math.round((inv.pdf_size || 0) / 1024) + ' KB' : '<span style="color:var(--faint)">ما مرفوع ملف</span>'}</span>
           ${extra.pdfUrl ? `<a class="btn sm" href="${esc(extra.pdfUrl)}" target="_blank" rel="noopener noreferrer">فتح</a>` : ''}
           ${!eb ? `<label class="btn sm" for="pdfIn">${inv.pdf_path || inv.pdf_name ? 'تغيير' : 'رفع'}</label><input type="file" id="pdfIn" accept="application/pdf" class="hidden">` : ''}</div>

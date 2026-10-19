@@ -1,4 +1,4 @@
-import { S, getInv, userName, boardName } from './state.js';
+import { S, getInv, userName, boardName, isReq } from './state.js';
 import { sb, rpc, refreshInvoice, loadInvoices } from './api.js';
 import { can } from './can.js';
 import { ask, toast, num, esc } from './util.js';
@@ -15,22 +15,24 @@ const filled = v => String(v ?? '').trim() !== '';
 
 export function missingBasic(inv) {
   const m = [];
-  if (!inv.customer_id) m.push('الزبون (من القائمة)');
-  if (filled(inv.quote_no) === filled(inv.res_no)) m.push('رقم عرض السعر أو رقم الحجز (واحد منهم فقط)');
-  if (num(inv.value) <= 0) m.push('قيمة الفاتورة');
-  if (!inv.pdf_path) m.push('ملف الـ PDF');
+  // الأدمن يكدر يخلي بعضها اختياري من صفحة المستخدمين ← إلزامية الحقول
+  if (isReq('customer') && !inv.customer_id) m.push('الزبون (من القائمة)');
+  if (filled(inv.quote_no) && filled(inv.res_no)) m.push('رقم عرض السعر أو رقم الحجز (واحد منهم فقط)');
+  else if (isReq('ref') && !filled(inv.quote_no) && !filled(inv.res_no)) m.push('رقم عرض السعر أو رقم الحجز (واحد منهم فقط)');
+  if (isReq('value') && num(inv.value) <= 0) m.push('قيمة الفاتورة');
+  if (isReq('pdf') && !inv.pdf_path) m.push('ملف الـ PDF');
   if (inv.disc_req && (num(inv.disc_pct) <= 0 || num(inv.disc_pct) > 100)) m.push('نسبة طلب الخصم');
   return m;
 }
 
 export function missingTerms(inv) {
   const m = [];
-  if (!['cash', 'credit'].includes(inv.payment)) m.push('طريقة السداد (نقدي أو آجل)');
+  if (isReq('payment') && !['cash', 'credit'].includes(inv.payment)) m.push('طريقة السداد (نقدي أو آجل)');
   if (inv.payment === 'credit' && !inv.credit_months) m.push('عدد أشهر الآجل');
-  if (!['customer', 'none', 'company'].includes(inv.payer)) m.push('النقل: على الزبون أو بدون');
+  if (isReq('payer') && !['customer', 'none', 'company'].includes(inv.payer)) m.push('النقل: على الزبون أو بدون');
   if (inv.payer === 'customer' && num(inv.transport_amt) <= 0) m.push('مبلغ أجور النقل');
   if (inv.ld && (num(inv.ld_pct) <= 0 || num(inv.ld_pct) > 100)) m.push('نسبة الخصم اللاحق');
-  if (!inv.cost_set) m.push('سعر الكلفة');
+  if (isReq('cost') && !inv.cost_set) m.push('سعر الكلفة');
   return m;
 }
 

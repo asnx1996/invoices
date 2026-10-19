@@ -178,7 +178,20 @@
       <p class="note">كل بورد معزول بطلباته. تحدد كل مستخدم يا بوردات يشوف من عمود "البوردات" بجدول المستخدمين. الأدمن يشوف كل البوردات.</p>
       <div class="tbl-wrap"><table id="boardsTbl"></table></div>
     </div>
-    <div class="panel">
+    <div class="panel hidden" id="permPanel">
+      <div class="page-head">
+        <h3>الأدوار والصلاحيات</h3>
+        <button class="btn primary" id="addRoleBtn"><svg class="i"><use href="#ic-plus"/></svg>دور جديد</button>
+      </div>
+      <p class="note">أشّر شنو يكدر يسوي كل دور، والتبويبات اللي تطلعله. المستخدم ياخذ صلاحيات كل أدواره مجموعة. الأدمن عنده كلشي دائماً. التغيير يمشي على المستخدم من يحدّث الصفحة.</p>
+      <div class="tbl-wrap"><table class="perm perm-edit" id="permTbl"></table></div>
+    </div>
+    <div class="panel hidden" id="reqPanel">
+      <h3 style="margin-top:0">الحقول الإلزامية بالطلب</h3>
+      <p class="note">المؤشّر إلزامي: الطلب ما ينرسل للمرحلة الجاية بدونه. شيل العلامة حتى يصير اختياري.</p>
+      <div class="req-grid" id="reqList"></div>
+    </div>
+    <div class="panel" id="settingsPanel">
       <h3 style="margin-top:0">إعدادات الموقع</h3>
       <div class="page-head">
         <label for="setCur">العملة</label>
@@ -193,10 +206,6 @@
         <button class="btn primary" id="setRateBtn">حفظ</button>
       </div>
       <p class="help" style="margin:0">إذا المندوب كتب القيمة بالدينار، تنقسم على هذا السعر وتنحفظ بالدولار.</p>
-    </div>
-    <div class="panel">
-      <h3 style="margin-top:0">مصفوفة الصلاحيات</h3>
-      <div class="tbl-wrap"><table class="perm" id="permTbl"></table></div>
     </div>
   </div>
 </main>

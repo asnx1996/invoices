@@ -1,5 +1,5 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
-import { S, changed, hasRole, getBoard } from './state.js';
+import { S, changed, hasRole, hasPerm, getBoard, DEFAULT_ROLE_DEFS } from './state.js';
 import { toast, DAY, setCurrency, setRate } from './util.js';
 
 export const configured = /^https:\/\/.+\.supabase\.co$/.test(SUPABASE_URL) && SUPABASE_ANON_KEY.length > 40;
@@ -37,7 +37,7 @@ export async function loadInvoices() {
 }
 
 export async function loadProfits(ids = null) {
-  if (!(hasRole('admin') || hasRole('mgr'))) { S.PROFITS = {}; S.COSTS = {}; return }
+  if (!hasPerm('see_profit')) { S.PROFITS = {}; S.COSTS = {}; return }
   const { data, error } = await sb.rpc('inv_profits', { p_ids: ids });
   if (error) return toast(error.message);
   if (!ids) S.PROFITS = {};
@@ -66,6 +66,14 @@ export async function loadSettings() {
   const m = Object.fromEntries((data || []).map(r => [r.key, r.value]));
   setCurrency(m.currency);
   setRate(m.usd_rate);
+  S.OPT = new Set(String(m.opt_fields || '').split(',').map(x => x.trim()).filter(Boolean));
+}
+
+// الأدوار وصلاحياتها (018). قبلها نبقى على الافتراضي
+export async function loadRoleDefs() {
+  const { data, error } = await sb.from('role_defs').select('key,name,perms,builtin').order('created_at');
+  S.HAS_ROLEDEFS = !error;
+  S.ROLEDEFS = error ? DEFAULT_ROLE_DEFS : data || [];
 }
 
 export async function saveSetting(key, value) {

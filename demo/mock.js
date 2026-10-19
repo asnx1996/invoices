@@ -131,6 +131,13 @@
   let db;
   try { db = JSON.parse(store.get(KEY)) } catch (e) { db = null }
   if (!db || !db.invoices || !db.notifications || !db.v2) db = seed();
+  // الأدوار وصلاحياتها (018) — العرض يعرض المصفوفة ويحفظها، بس قواعده تبقى على الأدوار الأساسية
+  if (!db.role_defs) db.role_defs = [
+    { key: 'rep', name: 'مندوب', builtin: true, perms: ['create'], created_at: '2026-01-01' },
+    { key: 'acc', name: 'محاسب', builtin: true, perms: ['acc', 'see_all', 'export'], created_at: '2026-01-02' },
+    { key: 'mgr', name: 'مدير', builtin: true, perms: ['approve', 'cust_all', 'complete', 'move', 'urgent_all', 'see_all', 'see_profit', 'reports', 'export'], created_at: '2026-01-03' },
+    { key: 'wh', name: 'مخزن', builtin: true, perms: ['complete', 'see_late'], created_at: '2026-01-04' },
+  ];
   // البوردات (012): الوسطى + الجنوبية. سارة بالاثنين، وكل طلب رابع إلها يروح للجنوبية
   if (!db.boards) {
     db.boards = [{ id: 1, name: 'المنطقة الوسطى' }, { id: 2, name: 'المنطقة الجنوبية' }];
@@ -316,6 +323,11 @@
             if (db.boards.some(b => b.name.trim() === String(r.name).trim())) return err('duplicate key value violates unique constraint', '23505');
             Object.assign(r, { id: ++db.seq.boards, name: String(r.name).trim() });
             db.boards.push(r);
+          } else if (t === 'role_defs') {
+            if (!has('admin')) return err('ما عندك صلاحية', '42501');
+            if (db.role_defs.some(d => d.name.trim() === String(r.name).trim())) return err('duplicate key value violates unique constraint', '23505');
+            Object.assign(r, { builtin: false, perms: r.perms || [], created_at: iso(Date.now()) });
+            db.role_defs.push(r);
           } else if (t === 'board_members') {
             if (!has('admin')) return err('ما عندك صلاحية', '42501');
             if (!db.board_members.some(m => m.board_id === r.board_id && m.user_id === r.user_id)) db.board_members.push(r);
@@ -343,6 +355,7 @@
         const list = this.rows();
         for (const r of list) {
           if (t === 'invoices') { const e = updateInvoice(r, { ...this.payload }); if (e) return err(e, '42501') }
+          else if (t === 'role_defs') { if (!has('admin')) return err('ما عندك صلاحية', '42501'); Object.assign(r, this.payload) }
           else if (t === 'customers' || t === 'boards') {
             if (!has('admin')) return err('ما عندك صلاحية', '42501');
             if (t === 'boards' && db.boards.some(b => b !== r && b.name.trim() === String(this.payload.name).trim())) return err('duplicate key value violates unique constraint', '23505');
@@ -362,6 +375,7 @@
         if (!has('admin')) return err('ما عندك صلاحية', '42501');
         const gone = new Set(this.rows()), ids = new Set([...gone].map(r => r.id));
         if (t === 'customers' && db.invoices.some(i => ids.has(i.customer_id))) return err('الزبون مربوط بطلبات');
+        if (t === 'role_defs') { if ([...gone].some(d => d.builtin)) return err('ما ينحذف دور أساسي'); db.profiles.forEach(p => p.xroles = (p.xroles || []).filter(k => !gone.has(db.role_defs.find(d => d.key === k)))) }
         db[t] = db[t].filter(r => !gone.has(r));
         save(); return { data: null, error: null };
       }

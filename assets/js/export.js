@@ -1,4 +1,4 @@
-import { S, COLS, SUB, PAY, PAY_LEGACY, PAYER, PAYER_LEGACY, MONTHS, userName, reps, hasRole, hasTerms, ldAmount, totalAfterTransport, pointsPct } from './state.js';
+import { S, COLS, SUB, PAY, PAY_LEGACY, PAYER, PAYER_LEGACY, MONTHS, userName, reps, hasRole, hasPerm, hasTerms, ldAmount, totalAfterTransport, pointsPct } from './state.js';
 import { sb, fetchAll } from './api.js';
 import { $, esc, num, ask, toast, ymd, dOnly, DAY } from './util.js';
 
@@ -32,7 +32,7 @@ async function exportXlsx(v) {
   } catch (e) { return toast(e.message) }
   if (!rows.length) return toast('ماكو طلبات بهاي الفلترة');
 
-  const seeProfit = hasRole('admin') || hasRole('mgr'), admin = hasRole('admin');
+  const seeProfit = hasPerm('see_profit'), admin = hasRole('admin');
   const profits = {}, costs = {};
   if (seeProfit) {
     const { data } = await sb.rpc('inv_profits', { p_ids: rows.map(r => r.id) });

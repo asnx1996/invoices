@@ -69,7 +69,7 @@ function show(el, at, items) {
 
 function paint() {
   box.innerHTML = st.items.map((p, i) => `<div class="mi${i === st.i ? ' on' : ''}" role="option" aria-selected="${i === st.i}" data-mi="${i}">
-    ${avatarHTML(p, 30)}<span class="mi-n">${esc(p.full_name)}<small>${esc(rolesText(p.roles))}</small></span></div>`).join('');
+    ${avatarHTML(p, 30)}<span class="mi-n">${esc(p.full_name)}<small>${esc(rolesText(p.roles, p.xroles))}</small></span></div>`).join('');
 }
 
 function pick(i) {

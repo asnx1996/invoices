@@ -1,4 +1,4 @@
-import { S, onChange, reps, hasRole, getInv } from './state.js';
+import { S, onChange, reps, roleHas, getInv } from './state.js';
 import { sb, getRange, setRange, setBoard, findInvoice } from './api.js';
 import { can } from './can.js';
 import { $, $$, toast, esc } from './util.js';
@@ -104,7 +104,7 @@ initHome(async id => { show('board'); await setBoard(id) }, addBoard);
 $('#fRange').addEventListener('change', e => setRange(+e.target.value));
 
 $('#newBtn').onclick = () => {
-  const rep_id = hasRole('rep') ? S.ME.id : (reps()[0] || {}).id;
+  const rep_id = roleHas(S.ME, 'create') ? S.ME.id : (reps()[0] || {}).id;
   if (!rep_id) return toast('ماكو مندوبين مفعّلين');
   openDraft(rep_id); // ما ينضاف للقاعدة لحد ما يضغط "حفظ الطلب"
   setTimeout(() => { const f = $('#f_customer_pick'); f && f.focus() }, 150);
