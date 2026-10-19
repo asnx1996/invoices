@@ -12,7 +12,7 @@ import { initExport } from './export.js';
 import { initNotifs } from './notifications.js';
 import { initMentions } from './mentions.js';
 import { openAvatarPicker } from './avatars.js';
-import { initAppearance, applyLook } from './appearance.js';
+import { initAppearance } from './appearance.js';
 import { initHome, renderHome, refreshHome } from './home.js';
 import { initTrash, renderTrash } from './trash.js';
 
@@ -38,7 +38,6 @@ function show(v, push = true) {
   if (v === 'trash') renderTrash();
   if (v === 'home') { renderHome(); refreshHome() }
   $('#boardSel').classList.toggle('on-home', v === 'home');
-  applyLook();
 }
 
 // بعد تسجيل الدخول: نظهر/نخفي حسب الصلاحيات
@@ -77,7 +76,6 @@ onChange(() => {
     if (can('home') && view === 'board') { show('home', false); history.replaceState({ v: view }, '', urlFor(view)) }
   }
   if (view === 'home') renderHome();
-  applyLook();
   if (pendingInv && S.loaded) {
     const id = pendingInv; pendingInv = null;
     findInvoice(id).then(ok => ok ? openDrawer(id) : toast('الطلب #' + id + ' مو موجود أو ما عندك صلاحية تشوفه'));

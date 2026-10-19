@@ -1,16 +1,14 @@
 // Service worker: يخلي الموقع ينثبت كتطبيق ويفتح أسرع.
 // "الشبكة أولاً": دائماً ياخذ آخر نسخة، والمخزّن بس إذا ماكو إنترنت.
 // البيانات (Supabase) ما تنخزن هنا أبداً.
-const CACHE = 'invoices-v21-day-sky';
+const CACHE = 'invoices-v22-two-skies';
 const SHELL = [
   'assets/avatars/people-3d.webp', 'assets/avatars/pixel-3d.webp', 'assets/avatars/robot-3d.webp', 'assets/avatars/animal-3d.webp', 'assets/avatars/space-3d.webp',
   './', 'index.html', 'assets/app.css', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png',
   'assets/js/main.js', 'assets/js/config.js', 'assets/js/util.js', 'assets/js/state.js', 'assets/js/api.js',
   'assets/js/can.js', 'assets/js/actions.js', 'assets/js/auth.js', 'assets/js/board.js', 'assets/js/drawer.js',
   'assets/js/users.js', 'assets/js/customers.js', 'assets/js/reports.js', 'assets/js/export.js', 'assets/js/backup.js',
-  'assets/js/appearance.js', 'assets/js/background-media.js', 'assets/backgrounds/ledger.jpg', 'assets/backgrounds/midnight.jpg',
-  'assets/brand/atlasplast-logo.png', 'assets/backgrounds/atlas-light.png', 'assets/backgrounds/atlas-dark.png',
-  'assets/backgrounds/scene-anime.png', 'assets/backgrounds/scene-future.png', 'assets/backgrounds/scene-nature.png',
+  'assets/js/appearance.js', 'assets/brand/atlasplast-logo.png',
   'assets/js/avatars.js', 'assets/js/avatar-art.js', 'assets/js/notifications.js', 'assets/js/mentions.js', 'assets/js/home.js', 'assets/js/ssel.js', 'assets/js/trash.js', 'assets/js/stars-data.js',
 ];
 
