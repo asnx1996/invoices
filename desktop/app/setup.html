@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'">
+<title>إعداد فواتير المبيعات</title>
+<style>
+  :root { --bg: #0b1020; --card: #141b2e; --line: #26304a; --text: #e8ecf6; --muted: #8e99b3; --accent: #5b8cff; --bad: #ff6b6b; --ok: #3ecf8e; }
+  * { box-sizing: border-box }
+  body { margin: 0; min-height: 100vh; background: radial-gradient(1200px 600px at 50% -10%, #1b2547, var(--bg)); color: var(--text);
+    font: 15px/1.6 "Segoe UI", Tahoma, sans-serif; display: grid; place-items: center; padding: 24px }
+  .card { width: min(560px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 28px }
+  h1 { margin: 0 0 4px; font-size: 22px } p.sub { margin: 0 0 22px; color: var(--muted) }
+  .choices { display: grid; gap: 12px }
+  .choice { text-align: right; background: #0f1527; border: 1px solid var(--line); border-radius: 14px; padding: 16px; color: var(--text); cursor: pointer; font: inherit }
+  .choice:hover, .choice:focus-visible { border-color: var(--accent); outline: none }
+  .choice b { display: block; font-size: 16px; margin-bottom: 2px } .choice span { color: var(--muted); font-size: 13.5px }
+  label { display: block; margin: 14px 0 6px; color: var(--muted); font-size: 13.5px }
+  input, select { width: 100%; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line); background: #0f1527; color: var(--text); font: inherit }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px }
+  .row { display: flex; gap: 10px; margin-top: 22px }
+  button.main { flex: 1; padding: 12px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer }
+  button.ghost { padding: 12px 16px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--text); font: inherit; cursor: pointer }
+  button:disabled { opacity: .6; cursor: progress }
+  .msg { margin-top: 16px; padding: 10px 12px; border-radius: 10px; font-size: 14px; white-space: pre-line }
+  .msg.bad { background: #ff6b6b1a; color: var(--bad); border: 1px solid #ff6b6b55 }
+  .msg.ok { background: #3ecf8e1a; color: var(--ok); border: 1px solid #3ecf8e55 }
+  .hint { color: var(--muted); font-size: 13px; margin-top: 6px }
+  .hidden { display: none }
+  code { direction: ltr; unicode-bidi: embed; background: #0f1527; padding: 1px 6px; border-radius: 6px }
+</style>
+</head>
+<body>
+<main class="card">
+  <h1>فواتير المبيعات</h1>
+  <p class="sub">إعداد أول مرة على هاي الحاسبة</p>
+  <div id="err" class="msg bad hidden"></div>
+
+  <section id="pick" class="choices">
+    <button class="choice" data-go="server"><b>هاي الحاسبة الرئيسية</b><span>عليها SQL Server وتحفظ كل البيانات. باقي الحاسبات تتصل بيها.</span></button>
+    <button class="choice" data-go="client"><b>حاسبة فرعية</b><span>تتصل بالحاسبة الرئيسية على نفس الشبكة.</span></button>
+  </section>
+
+  <section id="client" class="hidden">
+    <label for="addr">عنوان الحاسبة الرئيسية</label>
+    <input id="addr" dir="ltr" placeholder="192.168.1.10" autocomplete="off">
+    <div class="hint">تلكاه بالحاسبة الرئيسية: قائمة البرنامج ← عناوين الشبكة.</div>
+    <div class="row"><button class="ghost" data-back>رجوع</button><button class="main" id="clientGo">اتصال</button></div>
+  </section>
+
+  <section id="server" class="hidden">
+    <label for="inst">نسخة SQL Server</label>
+    <select id="inst"></select>
+    <div class="hint" id="instHint"></div>
+    <div id="adminBox">
+      <label for="aname">اسم مستخدم الأدمن (إنجليزي)</label>
+      <input id="aname" dir="ltr" placeholder="admin" autocomplete="off">
+      <label for="full">الاسم الكامل</label>
+      <input id="full" placeholder="مدير النظام">
+      <label for="apass">رمز الأدمن (8 أحرف أو أكثر)</label>
+      <input id="apass" type="password" dir="ltr" autocomplete="new-password">
+    </div>
+    <div class="row"><button class="ghost" data-back>رجوع</button><button class="main" id="serverGo">تهيئة وتشغيل</button></div>
+  </section>
+
+  <div id="ok" class="msg ok hidden"></div>
+</main>
+<script>
+  const $ = s => document.querySelector(s);
+  const show = id => ['pick', 'client', 'server'].forEach(x => $('#' + x).classList.toggle('hidden', x !== id));
+  const clean = e => String(e && e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+  const err = t => { $('#err').textContent = t || ''; $('#err').classList.toggle('hidden', !t) };
+  const q = new URLSearchParams(location.search);
+  if (q.get('error')) err(q.get('error'));
+
+  document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { err(''); show(b.dataset.go); (b.dataset.go === 'client' ? $('#addr') : $('#inst')).focus() });
+  document.querySelectorAll('[data-back]').forEach(b => b.onclick = () => { err(''); show('pick') });
+
+  window.setup.state().then(st => {
+    if (st.settings.serverUrl) $('#addr').value = st.settings.serverUrl.replace(/^http:\/\//, '').replace(':' + st.port, '');
+    const list = st.instances.length ? st.instances : ['SQLEXPRESS'];
+    // Express أول لأنها مجانية وما تنتهي
+    list.sort((a, b) => /EXPRESS/i.test(b) - /EXPRESS/i.test(a));
+    $('#inst').innerHTML = list.map(n => `<option value="${n}">${n === 'MSSQLSERVER' ? 'MSSQLSERVER (الافتراضية)' : n}</option>`).join('');
+    $('#instHint').textContent = !st.sqlcmd ? 'ما لكيت أداة sqlcmd. نصّب SQL Server (Express مجاني) أول.'
+      : !st.instances.length ? 'ما لكيت SQL Server على هاي الحاسبة. نصّب SQL Server Express أول.' : 'ننشئ قاعدة جديدة اسمها InvoicesApp. بيانات البرامج الثانية ما تتأثر.';
+  });
+
+  $('#clientGo').onclick = async () => {
+    const b = $('#clientGo'); b.disabled = true; err('');
+    try { await window.setup.client($('#addr').value) } catch (e) { err(clean(e)) }
+    b.disabled = false;
+  };
+  $('#addr').addEventListener('keydown', e => { if (e.key === 'Enter') $('#clientGo').click() });
+
+  $('#serverGo').onclick = async () => {
+    const b = $('#serverGo'); b.disabled = true; b.textContent = 'جاري التهيئة...'; err('');
+    try {
+      const r = await window.setup.server({ instance: $('#inst').value, adminName: $('#aname').value.trim(), adminPass: $('#apass').value, fullName: $('#full').value.trim() });
+      $('#ok').textContent = r.log.join('\n'); $('#ok').classList.remove('hidden');
+    } catch (e) { err(clean(e)) }
+    b.disabled = false; b.textContent = 'تهيئة وتشغيل';
+  };
+</script>
+</body>
+</html>

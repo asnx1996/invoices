@@ -1,0 +1,70 @@
+{
+  "name": "invoices-desktop",
+  "productName": "فواتير المبيعات",
+  "version": "1.0.0",
+  "description": "برنامج فواتير المبيعات — نسخة الحاسبة",
+  "private": true,
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "node build-server.mjs && electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^37.10.3",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.25.12"
+  },
+  "build": {
+    "appId": "local.invoices.desktop",
+    "productName": "فواتير المبيعات",
+    "executableName": "Invoices",
+    "artifactName": "Invoices-Setup-${version}.${ext}",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.cjs",
+      "setup.html",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "server-pack",
+        "to": "server"
+      },
+      {
+        "from": "../..",
+        "to": "web",
+        "filter": [
+          "index.html",
+          "sw.js",
+          "manifest.webmanifest",
+          "assets/**",
+          "icons/**"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "../../icons/progress-512.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "فواتير المبيعات",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "include": "installer.nsh",
+      "language": "1025",
+      "installerLanguages": [
+        "ar_SA",
+        "en_US"
+      ]
+    }
+  }
+}

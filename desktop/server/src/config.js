@@ -18,6 +18,9 @@ export const config = existsSync(CONFIG_PATH)
   ? { ...defaults, ...JSON.parse(readFileSync(CONFIG_PATH, 'utf8')) }
   : structuredClone(defaults);
 config.sql = { ...defaults.sql, ...config.sql };
+// برنامج الحاسبة (Electron) يحدد مكان الواجهة والبيانات
+if (process.env.INVOICES_WEBROOT) config.webRoot = process.env.INVOICES_WEBROOT;
+if (process.env.INVOICES_DATA) config.dataDir = process.env.INVOICES_DATA;
 
 export function saveConfig() {
   mkdirSync(dirname(CONFIG_PATH), { recursive: true });
