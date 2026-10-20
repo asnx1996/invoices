@@ -74,7 +74,7 @@
       const inv = {
         id, stage, sub, rep_id: rep, customer_id: cust, customer: c.name,
         quote_no: n % 3 === 1 ? null : 'Q-' + (7300 + n * 13), res_no: n % 3 === 1 ? 'R-' + (5100 + n * 11) : null,
-        value: value || null, payment, credit_months: months, payer, transport_amt: tamt, points, ld: ld > 0, ld_pct: ld || null, disc_req: false, disc_pct: null,
+        value: value || null, payment, credit_months: months, payer, transport_amt: tamt, points, ld: ld > 0, ld_pct: ld || null, disc_req: false, disc_pct: null, cust_debt: false, debt_amt: null, bal_cur: null, bal_iqd: null, bal_usd: null,
         notes: '', pdf_path: value ? `${id}/عرض-${id}.pdf` : null, pdf_name: value ? `عرض-${id}.pdf` : null, pdf_size: value ? 184000 + n * 3100 : null,
         cost_set: cost != null, returned: n === 5 ? 1 : 0, sales_no: stage === 'done' ? salesNo(n) : null,
         cancel_reason: stage === 'cancel' ? reasons[ci++ % 2] : null, created_at: iso(created), stage_at: iso(stageAt),
@@ -221,9 +221,9 @@
   function stageLog(inv) { db.invoice_stage_log.push({ id: db.seq.invoice_stage_log++, invoice_id: inv.id, key: inv.stage === 'decision' ? 'decision:' + inv.sub : inv.stage, entered_at: iso(Date.now()) }) }
 
   const FIELD = { customer_id: 'الزبون', quote_no: 'رقم عرض السعر', res_no: 'رقم الحجز', value: 'قيمة الفاتورة', payment: 'طريقة السداد', credit_months: 'مدة الآجل',
-    payer: 'النقل', transport_amt: 'أجور النقل', points: 'النقاط', ld: 'خصم لاحق', ld_pct: 'نسبة الخصم', disc_req: 'طلب خصم', disc_pct: 'نسبة طلب الخصم', notes: 'ملاحظات', pdf_path: 'ملف الـ PDF', rep_id: 'المندوب' };
+    payer: 'النقل', transport_amt: 'أجور النقل', points: 'النقاط', ld: 'خصم لاحق', ld_pct: 'نسبة الخصم', disc_req: 'طلب خصم', disc_pct: 'نسبة طلب الخصم', cust_debt: 'على الزبون دين', debt_amt: 'مبلغ الدين', bal_cur: 'عملة الرصيد', bal_iqd: 'الرصيد بالدينار', bal_usd: 'الرصيد بالدولار', notes: 'ملاحظات', pdf_path: 'ملف الـ PDF', rep_id: 'المندوب' };
   const BASIC = ['customer_id', 'customer', 'quote_no', 'res_no', 'value', 'pdf_path', 'pdf_name', 'pdf_size', 'rep_id'];
-  const TERMS = ['payment', 'credit_months', 'payer', 'transport_amt', 'points', 'ld', 'ld_pct', 'notes'];
+  const TERMS = ['payment', 'credit_months', 'payer', 'transport_amt', 'points', 'ld', 'ld_pct', 'notes', 'cust_debt', 'debt_amt', 'bal_cur', 'bal_iqd', 'bal_usd'];
 
   function updateInvoice(inv, patch) {
     const keys = Object.keys(patch);
@@ -310,7 +310,7 @@
             if (r.board_id == null) r.board_id = 1;
             if (!inBoard(r.board_id) || !(has('admin') || (has('rep') && r.rep_id === session))) return err('new row violates row-level security policy for table "invoices"', '42501');
             const c = db.customers.find(x => x.id === r.customer_id);
-            Object.assign(r, { id: ++db.seq.invoices, created_by: session, stage: 'new', sub: null, customer: c ? c.name : r.customer || '', points: 0, ld: false, disc_req: !!r.disc_req, disc_pct: r.disc_req ? r.disc_pct ?? null : null, cost_set: false, returned: 0,
+            Object.assign(r, { id: ++db.seq.invoices, created_by: session, stage: 'new', sub: null, customer: c ? c.name : r.customer || '', points: 0, ld: false, disc_req: !!r.disc_req, disc_pct: r.disc_req ? r.disc_pct ?? null : null, cust_debt: false, cost_set: false, returned: 0,
               created_at: iso(Date.now()), stage_at: iso(Date.now()), closed_at: null, pdf_path: null, delete_req_at: null });
             db.invoices.push(r); addLog(r.id, 'أنشأ الطلب'); stageLog(r);
           } else if (t === 'customers') {

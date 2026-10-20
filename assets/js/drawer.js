@@ -230,8 +230,24 @@ function termsHTML(inv) {
       <div class="term-box">${tog('خصم لاحق', 'ld', inv.ld, et)}
         ${inv.ld ? `<div class="grid">${fld('نسبة الخصم %', 'ld_pct', inv.ld_pct, { type: 'number', req: true, dis: et, rer: true })}
           <div class="fld"><div class="help" style="margin-top:28px">مبلغ الخصم: <b>${money(ldAmount(inv))}</b></div></div></div>` : ''}</div>
+      ${custStateHTML(inv, et)}
       ${fld('ملاحظات', 'notes', inv.notes, { type: 'textarea', dis: et, full: true, help: et ? '' : MENTION_HELP }).replace('data-f="notes"', 'data-f="notes" data-mention="1"')}
     </div></section>`;
+}
+
+// حالة الزبون (019): عليه دين؟ وكم، ورصيده بالدينار أو الدولار أو الاثنين
+const BAL_CUR = { iqd: 'دينار', usd: 'دولار', both: 'دينار ودولار' };
+function custStateHTML(inv, dis) {
+  if (!('cust_debt' in inv)) return ''; // قبل ما تتشغل 019
+  const bc = inv.bal_cur;
+  return `<div class="term-box"><div class="help" style="font-weight:600;margin-bottom:6px">حالة الزبون</div>
+    ${tog('على الزبون دين', 'cust_debt', inv.cust_debt, dis)}
+    <div class="grid">
+      ${inv.cust_debt ? fld(`مبلغ الدين (${cur()})`, 'debt_amt', inv.debt_amt, { type: 'number', dis, rer: true }) : ''}
+      ${fld('عملة رصيد الزبون', 'bal_cur', bc, { opts: BAL_CUR, dis, rer: true })}
+      ${bc === 'iqd' || bc === 'both' ? fld('الرصيد بالدينار (د.ع)', 'bal_iqd', inv.bal_iqd, { type: 'number', dis, rer: true }) : ''}
+      ${bc === 'usd' || bc === 'both' ? fld('الرصيد بالدولار ($)', 'bal_usd', inv.bal_usd, { type: 'number', dis, rer: true }) : ''}
+    </div></div>`;
 }
 
 // الربح: إذا اكو تعديلات ما انحفظت، نحسب النتيجة الجديدة بالمتصفح ونبينها جنب القديمة (نفس معادلة inv_profit_rows)
@@ -588,7 +604,7 @@ export function initDrawer() {
     let val = el.type === 'checkbox' ? el.checked : el.value;
     // الحقول النصية بالقاعدة ما تقبل null، الفارغ ينحفظ ''
     if (val === '' && !['quote_no', 'res_no', 'notes'].includes(col)) val = null;
-    if (['value', 'transport_amt', 'ld_pct', 'points', 'credit_months', 'disc_pct'].includes(col)) val = val === null ? null : num(val);
+    if (['value', 'transport_amt', 'ld_pct', 'points', 'credit_months', 'disc_pct', 'debt_amt', 'bal_iqd', 'bal_usd'].includes(col)) val = val === null ? null : num(val);
     if (col === 'points' && val === null) val = 0;
     const patch = { [col]: val };
     // تنظيف الحقول التابعة
@@ -596,6 +612,8 @@ export function initDrawer() {
     if (col === 'payer' && val !== 'customer') patch.transport_amt = 0;
     if (col === 'ld' && !val) patch.ld_pct = null;
     if (col === 'disc_req' && !val) patch.disc_pct = null;
+    if (col === 'cust_debt' && !val) patch.debt_amt = null;
+    if (col === 'bal_cur') { if (val !== 'iqd' && val !== 'both') patch.bal_iqd = null; if (val !== 'usd' && val !== 'both') patch.bal_usd = null }
     stage(inv, patch, !!el.dataset.rer || Object.keys(patch).length > 1);
   });
 }

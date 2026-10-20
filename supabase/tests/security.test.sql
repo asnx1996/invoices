@@ -165,6 +165,7 @@ begin
     format($q$select (count(*) > 0)::text from public.invoice_log where invoice_id = %s and body like 'عدّل القيمة%%'$q$, i_new1), 'true');
   perform pg_temp.t_ok('مندوب: يرجع القيمة', format('update public.invoices set value = 950000 where id = %s', i_new1), 1);
   perform pg_temp.t_denied('مندوب: ما يعدل النقاط', format('update public.invoices set points = 1 where id = %s', i_new1));
+  perform pg_temp.t_denied('مندوب: ما يعدل دين الزبون', format('update public.invoices set cust_debt = true where id = %s', i_new1));
   perform pg_temp.t_denied('مندوب: ما يغير المرحلة', format($q$update public.invoices set stage = 'done' where id = %s$q$, i_new1));
   perform pg_temp.t_denied('مندوب: ما يغير تاريخ المرحلة', format('update public.invoices set stage_at = now() - interval ''9 days'' where id = %s', i_new1));
   perform pg_temp.t_denied('مندوب: ما يعدل طلب مندوب ثاني', format($q$update public.invoices set customer = 'x' where id = %s$q$, i_new2));
@@ -231,6 +232,10 @@ begin
   perform pg_temp.t_denied('محاسب: توصيل على الزبون بدون مبلغ مرفوض', format('select public.inv_send_to_decision(%s)', i_acc));
   perform pg_temp.t_ok('محاسب: النقل والخصم والنقاط',
     format('update public.invoices set transport_amt = 50000, ld = true, ld_pct = 5, points = 2 where id = %s', i_acc), 1);
+  perform pg_temp.t_ok('محاسب: دين الزبون ورصيده',
+    format($q$update public.invoices set cust_debt = true, debt_amt = 1500, bal_cur = 'both', bal_iqd = 250000, bal_usd = 300 where id = %s$q$, i_acc), 1);
+  perform pg_temp.t_denied('محاسب: مبلغ الدين ما يكون سالب', format('update public.invoices set debt_amt = -1 where id = %s', i_acc));
+  perform pg_temp.t_denied('محاسب: عملة الرصيد من القائمة بس', format($q$update public.invoices set bal_cur = 'eur' where id = %s$q$, i_acc));
   perform pg_temp.t_denied('محاسب: ما يرسل بدون كلفة', format('select public.inv_send_to_decision(%s)', i_acc));
   perform pg_temp.t_denied('محاسب: الكلفة لازم أكبر من صفر', format('select public.inv_set_cost(%s, 0)', i_acc));
   perform pg_temp.t_ok('محاسب: يكتب الكلفة', format('select public.inv_set_cost(%s, 800000)', i_acc));
