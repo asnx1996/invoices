@@ -10,6 +10,7 @@ import { searchSelect } from './ssel.js';
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch (e) { return d } };
 const keep = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch (e) { } };
 const folded = new Set(load('ib_folded', []));   // أعمدة مطوية
+let peekCol = null;                                // العمود المطوي اللي مفتوح مؤقتاً (الماوس فوقه)
 const sortBy = load('ib_sort', {});              // عمود → نوع الترتيب
 let allOpen = !!load('ib_open', false);          // كل الكروت مفتوحة؟
 const flipped = new Set();                       // كروت عكس الوضع العام (للجلسة فقط)
@@ -129,9 +130,15 @@ export function renderBoard() {
       <div class="mc-body" id="mb-${c.k}" ${open ? '' : 'hidden'}>${open ? `<div class="col-sub"><span>${c.who}</span>${sortSelect(c.k)}</div>
         <div class="col-body">${items.map(cardHTML).join('') || '<div class="empty">لا توجد طلبات</div>'}</div>` : ''}</div></section>`;
     }
-    if (folded.has(c.k)) return `<section class="column folded" data-col="${c.k}">
+    // العمود المطوي: من توكف عليه بالماوس ينفتح مؤقتاً (peek) ويرجع يتطوى من تطلع منه. الضغط يفتحه دائماً
+    if (folded.has(c.k)) return `<section class="column folded${peekCol === c.k ? ' peek still' : ''}" data-col="${c.k}">
       <button type="button" class="col-fold" aria-expanded="false" aria-label="فتح عمود ${c.t}" title="فتح العمود">
-        <span class="dot" style="background:${c.c}"></span><span class="count">${items.length}</span>${urg ? `<span class="urg-dot" title="${urg} طارئ"></span>` : ''}<h2>${c.t}</h2></button></section>`;
+        <span class="dot" style="background:${c.c}"></span><span class="count">${items.length}</span>${urg ? `<span class="urg-dot" title="${urg} طارئ"></span>` : ''}<h2>${c.t}</h2></button>
+      <div class="peek-body" aria-hidden="${peekCol !== c.k}">
+        <div class="col-head"><span class="dot" style="background:${c.c}"></span><h2>${c.t}</h2><span class="count">${items.length}</span>
+          <button type="button" class="col-fold icon-btn sm pin" aria-expanded="false" aria-label="تثبيت عمود ${c.t} مفتوح" title="خليه مفتوح" tabindex="-1">${ic('expand')}</button></div>
+        <div class="col-sub"><span>${c.who}</span>${sortSelect(c.k)}</div>
+        <div class="col-body">${items.map(cardHTML).join('') || '<div class="empty">لا توجد طلبات</div>'}</div></div></section>`;
     return `<section class="column" data-col="${c.k}">
       <div class="col-head"><span class="dot" style="background:${c.c}"></span><h2>${c.t}</h2><span class="count">${items.length}</span>
         <button type="button" class="col-fold icon-btn sm" aria-expanded="true" aria-label="طي عمود ${c.t}" title="طي العمود">${ic('chev')}</button></div>
@@ -202,13 +209,32 @@ export function initBoard() {
     const f = e.target.closest('.col-fold');
     if (f) {
       const k = f.closest('.column').dataset.col;
-      folded.has(k) ? folded.delete(k) : folded.add(k); keep('ib_folded', [...folded]); renderBoard(); return;
+      folded.has(k) ? folded.delete(k) : folded.add(k); keep('ib_folded', [...folded]); peekCol = null; renderBoard(); return;
     }
     if (e.target.closest('.col-sort')) return;
     const m = e.target.closest('.more-btn');
     if (m) { const id = +m.closest('.card').dataset.id; flipped.has(id) ? flipped.delete(id) : flipped.add(id); toggleCard(m.closest('.card')); return }
     const c = e.target.closest('.card'); if (c) openDrawer(+c.dataset.id);
   });
+
+  // فتح العمود المطوي مؤقتاً من يوكف عليه الماوس (بعد لحظة حتى المرور السريع ما يفتحه)
+  let peekT = null;
+  const setPeek = k => {
+    if (peekCol === k) return;
+    $$('.column.peek').forEach(x => { x.classList.remove('peek', 'still'); x.querySelector('.peek-body').setAttribute('aria-hidden', 'true') });
+    peekCol = k;
+    const col = k && $(`.column.folded[data-col="${k}"]`);
+    if (col) { col.classList.add('peek'); col.querySelector('.peek-body').setAttribute('aria-hidden', 'false') }
+  };
+  const board = $('#board');
+  board.addEventListener('pointerover', e => {
+    if (e.pointerType !== 'mouse' || narrow.matches) return;
+    const col = e.target.closest('.column.folded');
+    clearTimeout(peekT);
+    if (col && col.dataset.col !== peekCol) peekT = setTimeout(() => setPeek(col.dataset.col), 180);
+    else if (!col && peekCol) peekT = setTimeout(() => setPeek(null), 250);
+  });
+  board.addEventListener('pointerleave', () => { clearTimeout(peekT); peekT = setTimeout(() => setPeek(null), 250) });
 
   // السحب والإفلات
   let dragId = null;

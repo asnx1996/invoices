@@ -96,10 +96,26 @@ input:focus,select:focus,textarea:focus{border-color:var(--primary)!important;ba
 .col-head .col-fold svg.i{transform:rotate(90deg);transition:transform .2s var(--ease)} /* سهم لليسار (RTL = للداخل) */
 @media (hover:hover){.col-head .col-fold:hover{background:var(--surface);color:var(--text)}}
 /* عمود مطوي: شريط ضيق بالعنوان عمودي، الضغط عليه يفتحه، والإفلات عليه يشتغل */
-.column.folded{width:52px}
-.column.folded .col-fold{display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 0 16px;width:100%;min-height:180px;border:0;background:transparent;border-radius:12px;cursor:pointer;color:var(--text)}
-@media (hover:hover){.column.folded .col-fold:hover{background:color-mix(in srgb,var(--surface) 50%,transparent)}}
-.column.folded h2{writing-mode:vertical-rl;font-size:15px;margin:0;font-weight:700;white-space:nowrap}
+.column.folded{width:52px;position:relative;overflow:hidden;transition:width .38s var(--ease-out),border-color .15s,background .15s,box-shadow .25s}
+/* فتح مؤقت عند وقوف الماوس: العمود يتوسع والعنوان يلتف من عمودي لأفقي */
+.peek-body{display:none;width:300px;flex-direction:column;min-height:0;flex:1}
+.column.folded.peek{width:300px;box-shadow:var(--shadow-lg)}
+.column.folded.peek>.col-fold{position:absolute;inset:0 auto auto 0;width:52px;opacity:0;pointer-events:none;transition:opacity .15s}
+.column.folded.peek .peek-body{display:flex;animation:peekIn .32s var(--ease-out) both}
+.column.folded.peek .peek-body .col-head h2{transform-origin:right center;animation:peekTitle .45s var(--ease-out) both}
+.column.folded.peek .peek-body .col-body>*{animation:peekCard .35s var(--ease-out) both}
+.column.folded.peek .peek-body .col-body>:nth-child(2){animation-delay:.04s}
+.column.folded.peek .peek-body .col-body>:nth-child(3){animation-delay:.08s}
+.column.folded.peek .peek-body .col-body>:nth-child(n+4){animation-delay:.12s}
+.column.folded.peek.still .peek-body,.column.folded.peek.still .peek-body *{animation:none!important}
+.pin svg.i{width:16px;height:16px}
+@keyframes peekIn{from{opacity:0}to{opacity:1}}
+@keyframes peekTitle{from{transform:rotate(90deg) translateX(-8px);opacity:0}to{transform:none;opacity:1}}
+@keyframes peekCard{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.column.folded{transition:none}.column.folded.peek .peek-body,.column.folded.peek .peek-body *{animation:none!important}}
+.column.folded>.col-fold{display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 0 16px;width:100%;min-height:180px;border:0;background:transparent;border-radius:12px;cursor:pointer;color:var(--text)}
+@media (hover:hover){.column.folded>.col-fold:hover{background:color-mix(in srgb,var(--surface) 50%,transparent)}}
+.column.folded>.col-fold h2{writing-mode:vertical-rl;font-size:15px;margin:0;font-weight:700;white-space:nowrap}
 .column.folded .count{font-size:12px;background:var(--surface);border-radius:999px;padding:1px 7px;color:var(--muted);font-weight:600;font-variant-numeric:tabular-nums}
 .column.folded .dot{width:10px;height:10px;border-radius:50%;flex:none}
 .urg-dot{width:8px;height:8px;border-radius:50%;background:var(--urgent)}
