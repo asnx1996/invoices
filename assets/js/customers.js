@@ -1,5 +1,5 @@
-import { S } from './state.js';
-import { sb, loadCustomers, fetchAll } from './api.js';
+import { S, hasPerm } from './state.js';
+import { sb, loadCustomers, fetchAll, rpc, LOCAL } from './api.js';
 import { $, esc, ask, toast } from './util.js';
 
 const key = n => String(n || '').trim().toLowerCase();
@@ -7,6 +7,7 @@ const key = n => String(n || '').trim().toLowerCase();
 export function renderCustomers() {
   const q = key($('#custQ').value), showOff = $('#custOff').checked;
   const list = S.CUSTOMERS.filter(c => (showOff || c.active) && (!q || key(c.name).includes(q) || key(c.phone).includes(q)));
+  $('#custXtra').classList.toggle('hidden', !(LOCAL && hasPerm('customers')));
   const used = new Map();
   S.INVOICES.forEach(i => i.customer_id && used.set(i.customer_id, (used.get(i.customer_id) || 0) + 1));
   $('#custCount').textContent = `${list.length} من ${S.CUSTOMERS.length}`;
@@ -78,8 +79,20 @@ async function clearCustomers() {
   }, { okText: 'مسح' });
 }
 
+// نسخة الحاسبة: كل وكلاء إكسترا (تحت حساب الزبائن) ينضافون للقائمة، والموجود بنفس الاسم ينربط بيهم
+async function syncXtra() {
+  const b = $('#custXtra'); if (b.classList.contains('busy')) return;
+  b.classList.add('busy'); toast('جاري السحب من إكسترا...');
+  const r = await rpc('xtra_sync_customers', {});
+  b.classList.remove('busy');
+  if (!r.ok) return;
+  await loadCustomers(); renderCustomers();
+  toast(`إكسترا: ${r.data.total} وكيل — انضاف ${r.data.added}${r.data.linked ? `، وانربط ${r.data.linked} موجود` : ''}`);
+}
+
 export function initCustomers() {
   $('#custAdd').onclick = () => editCustomer(null);
+  $('#custXtra').onclick = syncXtra;
   $('#custClear').onclick = clearCustomers;
   ['#custQ', '#custOff'].forEach(s => $(s).addEventListener('input', renderCustomers));
   $('#custImport').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) importFile(f) });

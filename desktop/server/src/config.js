@@ -12,12 +12,15 @@ const defaults = {
   webRoot: resolve(SERVER_DIR, '..', '..'),
   dataDir: join(SERVER_DIR, 'data'),
   sql: { server: 'localhost', instanceName: 'TEW_SQLEXPRESS', port: 0, database: 'InvoicesApp', user: 'invoices_app', password: '' },
+  // برنامج إكسترا (قراءة فقط): نسخة SQL Server وقاعدة الشركة. salesType = رقم نوع فاتورة المبيعات بإكسترا
+  xtra: { server: '.', database: 'XtrDB11_10_2026', salesType: 1, customersAccount: '121' },
 };
 
 export const config = existsSync(CONFIG_PATH)
   ? { ...defaults, ...JSON.parse(readFileSync(CONFIG_PATH, 'utf8')) }
   : structuredClone(defaults);
 config.sql = { ...defaults.sql, ...config.sql };
+config.xtra = { ...defaults.xtra, ...config.xtra };
 // برنامج الحاسبة (Electron) يحدد مكان الواجهة والبيانات
 if (process.env.INVOICES_WEBROOT) config.webRoot = process.env.INVOICES_WEBROOT;
 if (process.env.INVOICES_DATA) config.dataDir = process.env.INVOICES_DATA;

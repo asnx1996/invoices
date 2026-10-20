@@ -79,9 +79,11 @@ create table customers (
   active bit not null default 1,
   created_at datetime2(3) not null default sysutcdatetime(),
   name_norm as lower(ltrim(rtrim(name))) persisted,
+  xtra_guid char(36) null,          -- الوكيل المقابل بإكسترا
   constraint customers_name_check check (ltrim(rtrim(name)) <> '')
 );
 create unique index customers_name_uniq on customers (name_norm);
+create unique index customers_xtra_uniq on customers (xtra_guid) where xtra_guid is not null;
 GO
 
 create table app_settings (
@@ -230,5 +232,5 @@ insert into role_defs ([key], name, perms, builtin) values
   ('acc', N'محاسب', '["acc","see_all","export"]', 1),
   ('mgr', N'مدير', '["approve","cust_all","complete","move","urgent_all","see_all","see_profit","reports","export"]', 1),
   ('wh', N'مخزن', '["complete","see_late"]', 1);
-insert into app_settings ([key], value) values ('currency', N'د.ع');
+insert into app_settings ([key], value) values ('currency', N'$');   -- قيمة الفاتورة تنحفظ بالدولار
 GO

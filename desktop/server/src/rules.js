@@ -32,7 +32,7 @@ const T = {
   comment_reactions: { pk: 'comment_id', cols: ['comment_id', 'user_id', 'emoji', 'at'], dt: ['at'] },
   invoice_notif_prefs: { pk: 'invoice_id', cols: ['user_id', 'invoice_id', 'level'] },
   notifications: { pk: 'id', cols: ['id', 'user_id', 'invoice_id', 'kind', 'actor', 'data', 'created_at', 'read_at'], dt: ['created_at', 'read_at'], json: ['data'], upd: ['read_at'] },
-  customers: { pk: 'id', cols: ['id', 'name', 'phone', 'notes', 'active', 'created_at'], dt: ['created_at'], bool: ['active'],
+  customers: { pk: 'id', cols: ['id', 'name', 'phone', 'notes', 'active', 'created_at', 'xtra_guid'], dt: ['created_at'], bool: ['active'],
     ins: ['name', 'phone', 'notes', 'active'], upd: ['name', 'phone', 'notes', 'active'] },
   profiles: { pk: 'id', cols: ['id', 'full_name', 'role', 'roles', 'xroles', 'active', 'created_at', 'avatar', 'avatar_chosen', 'notif_level'],
     dt: ['created_at'], json: ['roles', 'xroles'], bool: ['active', 'avatar_chosen'],

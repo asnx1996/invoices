@@ -7,6 +7,7 @@ import {
 } from './rules.js';
 import { hashPassword, loginEmail } from './auth.js';
 import { purgeInvoiceRows } from './query.js';
+import { xtraEnabled, searchBills, getBill, listAgents } from './xtra.js';
 
 const trim = s => String(s ?? '').trim();
 const DAY = 86400000;
@@ -424,10 +425,62 @@ export const RPC = {
     return null;
   },
 
+  // ------------------------------------------------------------ إكسترا (قراءة فقط)
+  async xtra_status() { return { enabled: xtraEnabled() } },
+
+  // فواتير المبيعات بإكسترا (للي يسوي طلبات أو المحاسب)
+  async xtra_bills(r, ctx, { p_q = '' } = {}) {
+    const u = ctx.user; needActive(u);
+    if (!(perm(u, 'create') || perm(u, 'acc'))) fail('ما عندك صلاحية');
+    return searchBills(p_q);
+  },
+
+  // اختيار فاتورة: الزبون ينضاف لقائمتنا إذا مو موجود، ويرجع الصافي وعملته
+  async xtra_pick_bill(r, ctx, { p_guid }) {
+    const u = ctx.user; needActive(u);
+    if (!(perm(u, 'create') || perm(u, 'acc'))) fail('ما عندك صلاحية');
+    const b = await getBill(p_guid);
+    let c = null;
+    if (b.customer) c = await linkCustomer(r, { guid: b.agent, name: b.customer });
+    return { number: String(b.number), date: b.date, currency: b.currency, cur: b.cur, net: b.net,
+      customer_id: c ? c.id : null, customer: c ? c.name : b.customer };
+  },
+
+  // سحب كل الوكلاء (الزبائن) من إكسترا لقائمة الزبائن
+  async xtra_sync_customers(r, ctx) {
+    const u = ctx.user; needActive(u);
+    if (!perm(u, 'customers')) fail('ما عندك صلاحية الزبائن');
+    const agents = await listAgents();
+    let added = 0, linked = 0;
+    for (const a of agents) {
+      const res = await linkCustomer(r, a);
+      if (res.added) added++; else if (res.linked) linked++;
+    }
+    return { total: agents.length, added, linked };
+  },
+
   // تنبيهات الموبايل (Web Push) تحتاج إنترنت — بالنسخة المحلية الإشعارات توصل مباشرة للبرنامج
   async push_subscribe() { return null },
   async push_unsubscribe() { return null },
 };
+
+// زبون مربوط بوكيل إكسترا: بالرابط أول، بعدين بالاسم (ونربطه)، وإذا ماكو ينضاف
+const phoneOf = p => /\d{5,}/.test(String(p || '')) ? String(p).trim().slice(0, 100) : '';
+async function linkCustomer(r, a) {
+  const name = trim(a.name).slice(0, 400);
+  if (a.guid) {
+    const c = await r.one(sql`select id, name from customers where xtra_guid = ${String(a.guid).toLowerCase()}`);
+    if (c) return c;
+  }
+  const byName = await r.one(sql`select id, name, xtra_guid from customers where name_norm = ${name.toLowerCase()}`);
+  if (byName) {
+    if (a.guid && !byName.xtra_guid) { await r.exec(sql`update customers set xtra_guid = ${String(a.guid).toLowerCase()} where id = ${byName.id}`); return { ...byName, linked: true } }
+    return byName;
+  }
+  const c = await r.one(sql`insert into customers (name, phone, notes, xtra_guid) output inserted.id, inserted.name
+    values (${name}, ${phoneOf(a.phone)}, ${'من إكسترا'}, ${a.guid ? String(a.guid).toLowerCase() : null})`);
+  return { ...c, added: true };
+}
 
 // تنبيه الطلبات المتأخرة (notify_late) — السيرفر يشغله كل ساعة
 export async function notifyLate(r) {

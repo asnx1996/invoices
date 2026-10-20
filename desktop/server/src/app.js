@@ -218,10 +218,19 @@ const lateTick = async () => {
   try { const out = await tx(r => notifyLate(r)); emit(out.events) } catch (e) { console.error('notify_late:', e.message) }
 };
 
+// تعديلات على قاعدة منصّبة قبل (schema.sql يتشغل بس على القاعدة الجديدة)
+async function upgradeDb() {
+  const r = await db();
+  await r.exec(sql`if col_length('customers', 'xtra_guid') is null alter table customers add xtra_guid char(36) null`);
+  await r.exec(sql`if not exists (select 1 from sys.indexes where name = 'customers_xtra_uniq')
+    exec('create unique index customers_xtra_uniq on customers (xtra_guid) where xtra_guid is not null')`);
+}
+
 let started = null;
 export async function start() {
   if (started) return started;
   await connect();
+  await upgradeDb();
   await new Promise((ok, bad) => { server.once('error', bad); server.listen(config.port, '0.0.0.0', ok) });
   setTimeout(lateTick, 60000).unref();
   setInterval(lateTick, 3600000).unref();

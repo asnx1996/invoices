@@ -2,20 +2,20 @@ import { S, COLS, SUB, PAY, PAY_LEGACY, PAYER, PAYER_LEGACY, MONTHS, POINT_RATE,
   ldAmount, transportAdded, totalAfterTransport, pointsPct, discPct, onChange, NOTIF_LEVELS } from './state.js';
 import { renderBoard } from './board.js';
 import { $, esc, num, fmt, money, pct, dt, dOnly, ic, toast, ask, cur, rate, numAttrs, numVal } from './util.js';
-import { sb, rpc, refreshInvoice } from './api.js';
+import { sb, rpc, refreshInvoice, loadCustomers, LOCAL } from './api.js';
 import { can } from './can.js';
 import { run, waitingOn, missingBasic, missingTerms } from './actions.js';
 import { avatarHTML } from './avatars.js';
 import { highlightMentions } from './mentions.js';
 
 // pending: تعديلات مكتوبة بالدرج وما انحفظت بعد (تنحفظ بزر "حفظ التعديلات")
-let extra = { comments: [], log: [], pdfUrl: null, costEdit: false, pending: {}, pendingCost: null, valCur: null, iqd: null };
+let extra = { comments: [], log: [], pdfUrl: null, costEdit: false, pending: {}, pendingCost: null, valCur: null, iqd: null, manualQuote: false };
 let returnFocus = null;
 const shown = { steps: false, log: false }; // الأقسام المطوية تبقى مثل ما تركها المستخدم
 
 export async function openDrawer(id, push = true) {
   const wasOpen = !!S.drawerId;
-  if (S.drawerId !== id) extra = { comments: [], log: [], pdfUrl: null, costEdit: false, pending: {}, pendingCost: null, valCur: null, iqd: null };
+  if (S.drawerId !== id) extra = { comments: [], log: [], pdfUrl: null, costEdit: false, pending: {}, pendingCost: null, valCur: null, iqd: null, manualQuote: false };
   else Object.assign(extra, { comments: [], log: [], pdfUrl: null });
   S.drawerId = id;
   renderDrawer();
@@ -453,7 +453,7 @@ export function renderDrawer() {
     <section class="blk"><h4>بيانات الطلب ${eb && !can('editValue', inv) ? `<span class="lock">${ic('lock')}للعرض فقط</span>` : ''}</h4>
       <div class="grid">
         ${customerFld(inv, eb)}
-        ${fld('رقم عرض السعر', 'quote_no', inv.quote_no, { dis: qDis })}
+        ${fld('رقم عرض السعر', 'quote_no', inv.quote_no, { dis: qDis, help: xtraQuote(inv, qDis) ? 'اضغط حتى تختار من فواتير إكسترا' : '' })}
         ${fld('رقم الحجز', 'res_no', inv.res_no, { dis: rDis, help: 'واحد منهم فقط' })}
         ${valueFld(inv, eb)}
         ${discHTML(inv, !can('editValue', inv))}
@@ -477,6 +477,53 @@ export function renderDrawer() {
   paintSaveBar();
   $('#drawer .d-body').scrollTop = scroll;
   if (focusId) { const f = document.getElementById(focusId); if (f && !f.disabled) f.focus({ preventScroll: true }) }
+}
+
+// ---------- فواتير إكسترا (نسخة الحاسبة): الضغط على "رقم عرض السعر" يفتح بحث بفواتير المبيعات ----------
+// الفاتورة المختارة تعبّي: الرقم، الزبون (ينضاف للقائمة إذا جديد)، والقيمة بعملتها
+const xtraQuote = (inv, dis) => LOCAL && !dis && !extra.manualQuote && can('editBasic', inv);
+const curName = { usd: 'دولار', iqd: 'دينار' };
+
+function openXtraBills(inv) {
+  ask('فواتير المبيعات بإكسترا', [], () => {}, { okText: 'إغلاق' });
+  const body = $('#mBody'), modal = $('#modal');
+  body.innerHTML = `<div class="fld"><label for="xq">بحث برقم الفاتورة أو اسم الزبون</label><input type="search" id="xq" autocomplete="off" placeholder="مثلاً 125 أو اسم الزبون"></div>
+    <div id="xList" class="xbills" role="listbox" aria-label="الفواتير"><div class="help">جاري التحميل...</div></div>
+    <button type="button" class="btn sm" id="xManual" style="margin-top:8px">أكتب الرقم يدوياً</button><div class="err" id="mErr" role="alert"></div>`;
+  let seq = 0, timer, busy = false;
+  const load = async () => {
+    const my = ++seq, r = await rpc('xtra_bills', { p_q: $('#xq').value });
+    if (my !== seq || !modal.open) return;
+    const list = r.ok ? r.data : [];
+    $('#xList').innerHTML = !r.ok ? '<div class="help">ما كدرت أقرا من إكسترا</div>' : list.length ? list.map(b => `
+      <button type="button" class="xbill" data-xb="${esc(b.guid)}" role="option">
+        <span class="xn">#${esc(b.number)}</span><span class="xc">${esc(b.customer || '—')}</span>
+        <span class="xv">${fmt(b.net)} ${esc(curName[b.cur] || b.currency || '')}</span><span class="xd">${esc(b.date || '')}</span></button>`).join('')
+      : '<div class="help">ماكو فواتير بهذا البحث</div>';
+  };
+  $('#xq').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(load, 250) });
+  body.onclick = async e => {
+    if (e.target.closest('#xManual')) { extra.manualQuote = true; modal.close(); renderDrawer(); setTimeout(() => { const q = $('#f_quote_no'); q && q.focus() }, 30); return }
+    const b = e.target.closest('[data-xb]'); if (!b || busy) return;
+    busy = true; b.classList.add('busy');
+    const r = await rpc('xtra_pick_bill', { p_guid: b.dataset.xb });
+    busy = false; b.classList.remove('busy');
+    if (!r.ok) return;
+    const x = r.data;
+    if (!x.cur) $('#mErr').textContent = `عملة الفاتورة (${x.currency || '؟'}) مو دينار ولا دولار — انحسبت دولار، راجعها`;
+    await loadCustomers();
+    const usd = x.cur === 'iqd' ? Math.round(x.net / rate() * 100) / 100 : x.net;
+    extra.valCur = x.cur === 'iqd' ? 'iqd' : 'usd';
+    extra.iqd = x.cur === 'iqd' ? x.net : null;
+    const patch = { quote_no: x.number, res_no: '', value: usd };
+    if (x.customer_id) Object.assign(patch, { customer_id: x.customer_id, customer: x.customer });
+    if (x.cur) modal.close();
+    stage(inv, patch, true);
+    toast(`فاتورة إكسترا #${x.number}: ${x.customer || ''} — ${fmt(x.net)} ${curName[x.cur] || x.currency || ''}`);
+  };
+  modal.addEventListener('close', () => { body.onclick = null; seq++ }, { once: true });
+  load();
+  setTimeout(() => $('#xq').focus(), 30);
 }
 
 async function addComment() {
@@ -616,6 +663,7 @@ export function initDrawer() {
     const rc = e.target.closest('[data-react]'); if (rc) return react(+rc.dataset.react, rc.dataset.emoji);
     if (e.target.closest('#cBtn')) addComment();
     if (e.target.closest('#saveDraft')) saveDraft();
+    if (e.target.id === 'f_quote_no') { const inv = getInv(S.drawerId); if (inv && xtraQuote(inv, e.target.disabled)) { e.target.blur(); openXtraBills(inv) } }
   });
   // نتذكر إذا المستخدم فتح "مراحل الطلب" أو "سجل الحركة"
   d.addEventListener('toggle', e => { const k = e.target.dataset && e.target.dataset.more; if (k) shown[k] = e.target.open }, true);

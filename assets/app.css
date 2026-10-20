@@ -806,3 +806,14 @@ body.has-stars .d-tile.ink{box-shadow:0 0 0 1px rgba(255,255,255,.09),0 1px 3px 
 @media (max-width:1000px){.d-grid2{grid-template-columns:minmax(0,1fr)}.d-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:520px){.d-tile{min-height:112px;padding:14px}.d-tile-v{font-size:26px}.d-bars{height:200px}.d-srow{grid-template-columns:72px minmax(0,1fr) auto}}
 @media (prefers-reduced-motion:reduce){.d-bar,.d-tip,.d-arrow{transition:none}}
+
+/* فواتير إكسترا (نسخة الحاسبة) */
+.xbills { display: flex; flex-direction: column; gap: 6px; max-height: min(52vh, 420px); overflow-y: auto; margin-top: 4px; padding: 2px }
+.xbill { display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: "n c v" "n d v"; gap: 0 12px; align-items: center; width: 100%;
+  text-align: start; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font: inherit; cursor: pointer }
+.xbill:hover, .xbill:focus-visible { border-color: var(--primary); outline: none; background: var(--primary-soft) }
+.xbill.busy { opacity: .6; cursor: progress }
+.xbill .xn { grid-area: n; font-weight: 700; color: var(--primary); font-variant-numeric: tabular-nums }
+.xbill .xc { grid-area: c; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.xbill .xd { grid-area: d; color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums }
+.xbill .xv { grid-area: v; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap }
