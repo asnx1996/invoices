@@ -138,11 +138,11 @@ ipcMain.handle('setup:server', async (_e, { instance, adminName, adminPass, full
   const log = [];
   await m.installDb({ instance, log: x => log.push(x) });
   await startServer();
-  if (!await m.hasUsers()) {
-    if (!adminName || !adminPass) throw new Error('اكتب اسم مستخدم ورمز الأدمن');
-    await m.createAdmin(adminName, adminPass, fullName || adminName);
-    log.push('✓ انشأ حساب الأدمن');
-  }
+  // الأدمن اللي انكتب بالشاشة ينحفظ دائماً (جديد، أو إذا الاسم موجود يتغير رمزه)
+  if (adminName && adminPass) {
+    const r = await m.createAdmin(adminName, adminPass, fullName || adminName);
+    log.push(r.existed ? '✓ الحساب موجود: تغيّر رمزه وصار أدمن' : '✓ انشأ حساب الأدمن');
+  } else if (!await m.hasUsers()) throw new Error('اكتب اسم مستخدم ورمز الأدمن');
   saveSettings({ mode: 'server' });
   makeTray();
   setImmediate(() => win.loadURL(`http://localhost:${PORT}/`));
