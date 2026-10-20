@@ -235,12 +235,14 @@ function termsHTML(inv) {
     ${custStateHTML(inv, et)}`;
 }
 
-// شنو تغيّر على الطلب من أرسله المندوب للحسابات — من سجل الحركة ("عدّل الحقل: قبل ← بعد")
+// شنو تغيّر على الطلب عند المدير: من أول ما وصل للمدير (أول "أرسل الطلب للقرار" بعد آخر إرسال للحسابات)
+// لحد هسه — يشمل اللي عدله المحاسب بعد ما رجعه المدير. من سجل الحركة ("عدّل الحقل: قبل ← بعد")
 // نجمع كل حقل من أول قيمة لآخر قيمة، واللي رجع مثل ما كان ما ينذكر
 function orderChanges() {
   const log = extra.log;
-  let from = -1;
-  log.forEach((l, i) => { if (l.body === 'أرسل الطلب للحسابات') from = i });
+  let sent = -1;
+  log.forEach((l, i) => { if (l.body === 'أرسل الطلب للحسابات') sent = i });
+  const from = log.findIndex((l, i) => i > sent && l.body === 'أرسل الطلب للقرار');
   if (from < 0) return null;
   const ch = new Map();
   for (const l of log.slice(from + 1)) {
@@ -252,20 +254,60 @@ function orderChanges() {
       if (ch.has(k)) ch.get(k).n = n; else ch.set(k, { o, n });
     }
   }
-  return [...ch].filter(([, v]) => v.o !== v.n).map(([k, { o, n }]) => {
-    if (k === 'على الزبون دين') return n === 'نعم' ? 'صار على الزبون دين' : n === 'لا' ? 'الزبون ما عليه دين' : 'انمسح جواب الدين';
-    if (['نعم', 'لا'].includes(n) && ['نعم', 'لا', '—'].includes(o)) return n === 'نعم' ? `انضاف ${k}` : `انشال ${k}`;
-    if (o === '—') return `تحدد ${k}: <b>${esc(n)}</b>`;
-    if (n === '—') return `انمسح ${k} (كان ${esc(o)})`;
-    return `تغيّر ${k} من <b>${esc(o)}</b> إلى <b>${esc(n)}</b>`;
-  });
+  for (const [k, v] of ch) if (v.o === v.n) ch.delete(k);
+  return describeChanges(ch, getInv(S.drawerId) || {});
+}
+
+// جمل مفهومة: الحقول المترابطة تنكتب بجملة وحدة ويا القيمة (مثلاً الخصم ونسبته ومبلغه)
+const B = v => `<b>${esc(v)}</b>`;
+const amtText = (inv, p) => [inv[p + '_iqd'] != null && ['iqd', 'both'].includes(inv[p + '_cur']) ? fmt(inv[p + '_iqd']) + ' د.ع' : '',
+  inv[p + '_usd'] != null && ['usd', 'both'].includes(inv[p + '_cur']) ? '$' + fmt(inv[p + '_usd']) : ''].filter(Boolean).join(' + ') || '—';
+function describeChanges(ch, inv) {
+  const out = [], take = k => { const v = ch.get(k); ch.delete(k); return v };
+  const pctDiscount = (on, pk, name, amount) => {
+    const T = take(on), P = take(pk);
+    if (T && T.n === 'نعم') out.push(`انضاف ${name} بنسبة ${B(P ? P.n : '')}%، بقيمة ${B(money(amount))}`);
+    else if (T && T.n === 'لا') out.push(`انشال ${name}${P && P.o !== '—' ? ` (كان ${B(P.o)}%)` : ''}`);
+    else if (P) out.push(`تغيّرت نسبة ${name} من ${B(P.o)}% إلى ${B(P.n)}%، وصارت قيمته ${B(money(amount))}`);
+  };
+  pctDiscount('خصم لاحق', 'نسبة الخصم اللاحق', 'الخصم اللاحق', ldAmount(inv));
+  pctDiscount('طلب خصم', 'نسبة طلب الخصم', 'طلب الخصم', num(inv.value) * discPct(inv) / 100);
+
+  const V = take('القيمة');
+  if (V) out.push(`تغيّرت قيمة الفاتورة من ${B(V.o === '—' ? '—' : V.o + ' ' + cur())} إلى ${B(V.n === '—' ? '—' : V.n + ' ' + cur())}`);
+
+  const Pay = take('طريقة السداد'), M = take('أشهر الآجل');
+  const months = inv.credit_months ? ` لمدة ${MONTHS[inv.credit_months] || inv.credit_months + ' أشهر'}` : '';
+  if (Pay) out.push(`تغيّرت طريقة السداد من ${B(Pay.o)} إلى ${B(Pay.n)}${Pay.n === 'آجل' ? months : ''}`);
+  else if (M) out.push(`تغيّرت مدة الآجل من ${B(M.o)} إلى ${B(M.n)} شهر`);
+
+  const Tr = take('التوصيل'), Ta = take('أجور النقل');
+  if (Tr) out.push(Tr.n === 'على الزبون' ? `صار النقل على الزبون بأجور ${B(money(inv.transport_amt))}` : `تغيّر النقل من ${B(Tr.o)} إلى ${B(Tr.n)}`);
+  else if (Ta) out.push(`تغيّرت أجور النقل من ${B(Ta.o)} إلى ${B(Ta.n)}`);
+
+  const Pt = take('النقاط');
+  if (Pt) out.push(`تغيّر عدد النقاط من ${B(Pt.o)} إلى ${B(Pt.n)} (نسبة النقاط صارت ${fmt(pointsPct(inv))}%)`);
+
+  const D = take('على الزبون دين'), dx = ['عملة الدين', 'الدين بالدينار', 'الدين بالدولار', 'مبلغ الدين'].map(take).some(Boolean);
+  if (D && D.n === 'نعم' || (!D && dx && inv.cust_debt)) out.push(`${D ? 'صار' : 'تغيّر'} دين الزبون: ${B(amtText(inv, 'debt'))}`);
+  else if (D) out.push(D.n === 'لا' ? 'الزبون ما عليه دين' : 'انمسح جواب الدين');
+  if (['عملة الرصيد', 'الرصيد بالدينار', 'الرصيد بالدولار'].map(take).some(Boolean)) out.push(`صار رصيد الزبون: ${B(amtText(inv, 'bal'))}`);
+
+  // أي حقل ثاني
+  for (const [k, { o, n }] of ch) {
+    if (['نعم', 'لا'].includes(n) && ['نعم', 'لا', '—'].includes(o)) out.push(n === 'نعم' ? `انضاف ${k}` : `انشال ${k}`);
+    else if (o === '—') out.push(`تحدد ${k}: ${B(n)}`);
+    else if (n === '—') out.push(`انمسح ${k} (كان ${esc(o)})`);
+    else out.push(`تغيّر ${k} من ${B(o)} إلى ${B(n)}`);
+  }
+  return out;
 }
 function changesHTML(inv) {
-  if (inv.stage === 'new') return '';
+  if (!['decision', 'done', 'cancel'].includes(inv.stage)) return '';
   const list = orderChanges();
   if (!list) return '';
-  return `<div class="term-box"><div class="help" style="font-weight:600;margin-bottom:6px">${ic('back')} شنو تغيّر على الطلب من أرسله المندوب</div>
-    ${list.length ? `<ul style="margin:0;padding-inline-start:18px;line-height:1.9">${list.map(x => `<li>${x}</li>`).join('')}</ul>` : '<div class="help">ما تغيّر شي — نفس اللي أرسله المندوب.</div>'}</div>`;
+  return `<div class="term-box"><div class="help" style="font-weight:600;margin-bottom:6px">${ic('back')} شنو تغيّر على الطلب عند المدير</div>
+    ${list.length ? `<ul style="margin:0;padding-inline-start:18px;line-height:1.9">${list.map(x => `<li>${x}</li>`).join('')}</ul>` : '<div class="help">ما تغيّر شي عند المدير — نفس الشروط اللي أرسلها المحاسب.</div>'}</div>`;
 }
 
 // حالة الزبون (019/021) قسم وحده: عليه دين؟ نعم/لا، وإذا نعم عملته ومبلغه. والرصيد دائماً

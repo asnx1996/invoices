@@ -220,8 +220,9 @@
   }
   function stageLog(inv) { db.invoice_stage_log.push({ id: db.seq.invoice_stage_log++, invoice_id: inv.id, key: inv.stage === 'decision' ? 'decision:' + inv.sub : inv.stage, entered_at: iso(Date.now()) }) }
 
-  const FIELD = { customer_id: 'الزبون', quote_no: 'رقم عرض السعر', res_no: 'رقم الحجز', value: 'قيمة الفاتورة', payment: 'طريقة السداد', credit_months: 'مدة الآجل',
-    payer: 'النقل', transport_amt: 'أجور النقل', points: 'النقاط', ld: 'خصم لاحق', ld_pct: 'نسبة الخصم', disc_req: 'طلب خصم', disc_pct: 'نسبة طلب الخصم', cust_debt: 'على الزبون دين', debt_cur: 'عملة الدين', debt_iqd: 'الدين بالدينار', debt_usd: 'الدين بالدولار', bal_cur: 'عملة الرصيد', bal_iqd: 'الرصيد بالدينار', bal_usd: 'الرصيد بالدولار', notes: 'ملاحظات', pdf_path: 'ملف الـ PDF', rep_id: 'المندوب' };
+  // نفس أسماء سجل القاعدة (invoices_history) حتى ملخص "شنو تغيّر" يشتغل بالتجريبي
+  const FIELD = { customer_id: 'الزبون', quote_no: 'رقم عرض السعر', res_no: 'رقم الحجز', value: 'القيمة', payment: 'طريقة السداد', credit_months: 'أشهر الآجل',
+    payer: 'التوصيل', transport_amt: 'أجور النقل', points: 'النقاط', ld: 'خصم لاحق', ld_pct: 'نسبة الخصم اللاحق', disc_req: 'طلب خصم', disc_pct: 'نسبة طلب الخصم', cust_debt: 'على الزبون دين', debt_cur: 'عملة الدين', debt_iqd: 'الدين بالدينار', debt_usd: 'الدين بالدولار', bal_cur: 'عملة الرصيد', bal_iqd: 'الرصيد بالدينار', bal_usd: 'الرصيد بالدولار', notes: 'ملاحظات', pdf_path: 'ملف الـ PDF', rep_id: 'المندوب' };
   const BASIC = ['customer_id', 'customer', 'quote_no', 'res_no', 'value', 'pdf_path', 'pdf_name', 'pdf_size', 'rep_id'];
   const TERMS = ['payment', 'credit_months', 'payer', 'transport_amt', 'points', 'ld', 'ld_pct', 'notes', 'cust_debt', 'debt_cur', 'debt_iqd', 'debt_usd', 'bal_cur', 'bal_iqd', 'bal_usd'];
 

@@ -15,7 +15,7 @@ import { openAvatarPicker } from './avatars.js';
 import { initAppearance } from './appearance.js';
 import { initHome, renderHome, refreshHome } from './home.js';
 import { initTrash, renderTrash } from './trash.js';
-import { initSuper, renderSuper } from './supervisor.js';
+import { initSuper, renderSuper, paintSuper } from './supervisor.js';
 
 const VIEWS = { home: '#viewHome', board: '#viewBoard', customers: '#viewCustomers', reports: '#viewReports', users: '#viewUsers', trash: '#viewTrash', super: '#viewSuper' };
 let view = 'board';
@@ -79,6 +79,7 @@ onChange(() => {
     if (can('home') && view === 'board') { show('home', false); history.replaceState({ v: view }, '', urlFor(view)) }
   }
   if (view === 'home') renderHome();
+  if (view === 'super') paintSuper();
   if (pendingInv && S.loaded) {
     const id = pendingInv; pendingInv = null;
     findInvoice(id).then(ok => ok ? openDrawer(id) : toast('الطلب #' + id + ' مو موجود أو ما عندك صلاحية تشوفه'));
