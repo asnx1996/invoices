@@ -239,14 +239,14 @@ function termsHTML(inv) {
 const BAL_CUR = { iqd: 'دينار', usd: 'دولار', both: 'دينار ودولار' };
 function custStateHTML(inv, dis) {
   if (!('cust_debt' in inv)) return ''; // قبل ما تتشغل 019
-  const bc = inv.bal_cur;
+  const bc = inv.bal_cur, rq = isReq('cust');
   return `<div class="term-box"><div class="help" style="font-weight:600;margin-bottom:6px">حالة الزبون</div>
     ${tog('على الزبون دين', 'cust_debt', inv.cust_debt, dis)}
     <div class="grid">
-      ${inv.cust_debt ? fld(`مبلغ الدين (${cur()})`, 'debt_amt', inv.debt_amt, { type: 'number', dis, rer: true }) : ''}
-      ${fld('عملة رصيد الزبون', 'bal_cur', bc, { opts: BAL_CUR, dis, rer: true })}
-      ${bc === 'iqd' || bc === 'both' ? fld('الرصيد بالدينار (د.ع)', 'bal_iqd', inv.bal_iqd, { type: 'number', dis, rer: true }) : ''}
-      ${bc === 'usd' || bc === 'both' ? fld('الرصيد بالدولار ($)', 'bal_usd', inv.bal_usd, { type: 'number', dis, rer: true }) : ''}
+      ${inv.cust_debt ? fld(`مبلغ الدين (${cur()})`, 'debt_amt', inv.debt_amt, { type: 'number', req: true, dis, rer: true }) : ''}
+      ${fld('عملة رصيد الزبون', 'bal_cur', bc, { opts: BAL_CUR, req: rq, dis, rer: true })}
+      ${bc === 'iqd' || bc === 'both' ? fld('الرصيد بالدينار (د.ع)', 'bal_iqd', inv.bal_iqd, { type: 'number', req: rq, dis, rer: true }) : ''}
+      ${bc === 'usd' || bc === 'both' ? fld('الرصيد بالدولار ($)', 'bal_usd', inv.bal_usd, { type: 'number', req: rq, dis, rer: true }) : ''}
     </div></div>`;
 }
 

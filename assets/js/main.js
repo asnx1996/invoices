@@ -15,8 +15,9 @@ import { openAvatarPicker } from './avatars.js';
 import { initAppearance } from './appearance.js';
 import { initHome, renderHome, refreshHome } from './home.js';
 import { initTrash, renderTrash } from './trash.js';
+import { initSuper, renderSuper } from './supervisor.js';
 
-const VIEWS = { home: '#viewHome', board: '#viewBoard', customers: '#viewCustomers', reports: '#viewReports', users: '#viewUsers', trash: '#viewTrash' };
+const VIEWS = { home: '#viewHome', board: '#viewBoard', customers: '#viewCustomers', reports: '#viewReports', users: '#viewUsers', trash: '#viewTrash', super: '#viewSuper' };
 let view = 'board';
 let pendingInv = null; // رابط طلب (#inv-12) ينفتح بعد ما تتحمل البيانات
 let startHome = false; // فتح التطبيق بدون رابط: صفحة البوردات أول (إذا عنده أكثر من بورد)
@@ -36,6 +37,7 @@ function show(v, push = true) {
   if (v === 'customers') renderCustomers();
   if (v === 'reports') renderReports();
   if (v === 'trash') renderTrash();
+  if (v === 'super') renderSuper();
   if (v === 'home') { renderHome(); refreshHome() }
   $('#boardSel').classList.toggle('on-home', v === 'home');
 }
@@ -46,6 +48,7 @@ function onReady() {
   $('#tabCustomers').classList.toggle('hidden', !can('customers'));
   $('#tabReports').classList.toggle('hidden', !can('reports'));
   $('#tabTrash').classList.toggle('hidden', !can('trash'));
+  $('#tabSuper').classList.toggle('hidden', !can('super'));
   $('#newBtn').classList.toggle('hidden', !can('create'));
   $('#exportBtn').classList.toggle('hidden', !can('export'));
   $('#fRange').value = String(getRange());
@@ -109,6 +112,7 @@ $('#newBtn').onclick = () => {
 };
 
 initBoard(); initAppearance(); initDrawer(); initUsers(); initCustomers(); initReports(); initExport(); initNotifs(); initMentions(); initTrash();
+initSuper(async id => { show('board'); if (await findInvoice(id)) openDrawer(id); else toast('الطلب #' + id + ' مو موجود') });
 $('#meBtn').onclick = () => openAvatarPicker();
 initAuth(onReady);
 

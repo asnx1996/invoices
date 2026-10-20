@@ -12,7 +12,7 @@ export function can(a, inv) {
     case 'customers': return P('customers');
     case 'trash': return P('trash');
     case 'reports': return P('reports');
-    case 'backup': case 'settings': return admin;
+    case 'backup': case 'settings': case 'super': return admin;
     case 'editBasic': return admin || (inv.stage === 'new' && P('create') && own);
     case 'editValue': return admin || (inv.stage === 'new' && P('create') && own) || (inv.stage === 'acc' && P('acc'));
     case 'sendToAcc': return inv.stage === 'new' && (admin || (P('create') && own));

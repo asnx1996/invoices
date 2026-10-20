@@ -242,6 +242,13 @@ begin
   perform pg_temp.t_eq('محاسب: ما يشوف الكلفة بعد كتابتها', 'select count(*) from public.invoice_costs', '0');
   perform pg_temp.t_eq('محاسب: ما يشوف الربح', 'select count(*) from public.inv_profits(null)', '0');
   perform pg_temp.t_denied('محاسب: ما يكتب كلفة لطلب مو بمرحلته', format('select public.inv_set_cost(%s, 5)', i_dec));
+  perform pg_temp.as_user(u_admin);
+  perform pg_temp.t_ok('إلزامية: الأدمن يخلي حالة الزبون إلزامية',
+    $q$insert into public.app_settings (key, value) values ('req_fields', 'cust') on conflict (key) do update set value = excluded.value$q$, 1);
+  perform pg_temp.as_user(u_acc);
+  perform pg_temp.t_ok('محاسب: يمسح رصيد الدولار', format('update public.invoices set bal_usd = null where id = %s', i_acc), 1);
+  perform pg_temp.t_denied('إلزامية: بدون رصيد الدولار ما ينرسل', format('select public.inv_send_to_decision(%s)', i_acc));
+  perform pg_temp.t_ok('محاسب: يرجع رصيد الدولار', format('update public.invoices set bal_usd = 300 where id = %s', i_acc), 1);
   perform pg_temp.t_ok('محاسب: يرسل للقرار', format('select public.inv_send_to_decision(%s)', i_acc));
   perform pg_temp.t_denied('محاسب: ما يعدل النقاط بعد الإرسال', format('update public.invoices set points = 9 where id = %s', i_acc));
 

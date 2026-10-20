@@ -33,6 +33,12 @@ export function missingTerms(inv) {
   if (inv.payer === 'customer' && num(inv.transport_amt) <= 0) m.push('مبلغ أجور النقل');
   if (inv.ld && (num(inv.ld_pct) <= 0 || num(inv.ld_pct) > 100)) m.push('نسبة الخصم اللاحق');
   if (isReq('cost') && !inv.cost_set) m.push('سعر الكلفة');
+  if (inv.cust_debt && num(inv.debt_amt) <= 0) m.push('مبلغ دين الزبون');
+  if (isReq('cust') && 'bal_cur' in inv) {
+    if (!inv.bal_cur) m.push('عملة رصيد الزبون');
+    if (['iqd', 'both'].includes(inv.bal_cur) && inv.bal_iqd == null) m.push('رصيد الزبون بالدينار');
+    if (['usd', 'both'].includes(inv.bal_cur) && inv.bal_usd == null) m.push('رصيد الزبون بالدولار');
+  }
   return m;
 }
 

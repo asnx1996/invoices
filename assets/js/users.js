@@ -166,11 +166,15 @@ export function initUsers() {
     }, { okText: 'حذف', danger: true, msg: n ? `ينشال من ${n} مستخدم. اللي ما عنده دور ثاني يبقى بدون صلاحيات.` : 'محد عنده هذا الدور.' });
   });
   // الحقول الإلزامية: المؤشّر إلزامي، والباقي ينحفظ بـ opt_fields
+  // (الحقول الاختيارية من الأصل تنحفظ بالعكس: المؤشّر منها بـ req_fields)
   $('#reqList').addEventListener('change', async e => {
     const t = e.target.closest('[data-req]'); if (!t) return;
-    const opt = new Set(S.OPT); t.checked ? opt.delete(t.dataset.req) : opt.add(t.dataset.req);
-    if (!await saveSetting('opt_fields', [...opt].join(','))) { t.checked = !t.checked; return }
-    S.OPT = opt; changed();
+    const k = t.dataset.req, optIn = REQ_FIELDS[k][2] === 'in';
+    const set = new Set(optIn ? S.REQX : S.OPT);
+    (t.checked === optIn) ? set.add(k) : set.delete(k);
+    if (!await saveSetting(optIn ? 'req_fields' : 'opt_fields', [...set].join(','))) { t.checked = !t.checked; return }
+    if (optIn) S.REQX = set; else S.OPT = set;
+    changed();
     toast(`${REQ_FIELDS[t.dataset.req][0]}: صار ${t.checked ? 'إلزامي' : 'اختياري'}`);
   });
 

@@ -81,12 +81,15 @@ S.ROLEDEFS = DEFAULT_ROLE_DEFS;
 S.HAS_ROLEDEFS = false;   // 018 متشغل؟
 
 // الحقول اللي الأدمن يكدر يخليها اختيارية (app_settings.opt_fields)
+// الحقول المعلّمة 'in' اختيارية من الأصل وتصير إلزامية إذا الأدمن أشّرها (app_settings.req_fields — 020)
 export const REQ_FIELDS = {
   customer: ['الزبون (من القائمة)', 'new'], ref: ['رقم عرض السعر أو رقم الحجز', 'new'], value: ['قيمة الفاتورة', 'new'],
   pdf: ['ملف الـ PDF', 'new'], payment: ['طريقة السداد', 'acc'], payer: ['النقل', 'acc'], cost: ['سعر الكلفة', 'acc'],
+  cust: ['حالة الزبون (الرصيد)', 'acc', 'in'],
 };
 S.OPT = new Set();
-export const isReq = k => !S.OPT.has(k);
+S.REQX = new Set();
+export const isReq = k => REQ_FIELDS[k] && REQ_FIELDS[k][2] === 'in' ? S.REQX.has(k) : !S.OPT.has(k);
 
 const roleKeys = p => [...(p.roles || []), ...(p.xroles || [])];
 // صلاحية من الأدوار بس (بدون استثناء الأدمن): منو "مندوب" مثلاً

@@ -66,7 +66,9 @@ export async function loadSettings() {
   const m = Object.fromEntries((data || []).map(r => [r.key, r.value]));
   setCurrency(m.currency);
   setRate(m.usd_rate);
-  S.OPT = new Set(String(m.opt_fields || '').split(',').map(x => x.trim()).filter(Boolean));
+  const list = v => new Set(String(v || '').split(',').map(x => x.trim()).filter(Boolean));
+  S.OPT = list(m.opt_fields);
+  S.REQX = list(m.req_fields);
 }
 
 // الأدوار وصلاحياتها (018). قبلها نبقى على الافتراضي

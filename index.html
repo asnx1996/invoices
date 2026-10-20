@@ -74,6 +74,7 @@
     <nav class="tabs" aria-label="الأقسام">
       <button class="tab hidden" data-view="home" id="tabHome">البوردات</button>
       <button class="tab" data-view="board" aria-current="page">اللوحة</button>
+      <button class="tab hidden" data-view="super" id="tabSuper">المشرف</button>
       <button class="tab hidden" data-view="reports" id="tabReports">التقارير</button>
       <button class="tab hidden" data-view="customers" id="tabCustomers">الزبائن</button>
       <button class="tab hidden" data-view="users" id="tabUsers">المستخدمين</button>
@@ -114,6 +115,22 @@
   <div class="cfg-warn hidden" id="noBoard">ما عندك بورد بعد. راجع الأدمن حتى يضيفك على بورد.</div>
   <div class="board-head"><h2 class="board-title" id="boardTitle"></h2><div class="stats" id="stats"></div></div>
   <div class="board-wrap"><div class="board" id="board"></div></div>
+</main>
+
+<main tabindex="-1" id="viewSuper" class="hidden">
+  <div class="page wide">
+    <div class="page-head">
+      <h3>المشرف</h3>
+      <input type="search" id="supQ" placeholder="بحث بالزبون أو رقم الطلب" aria-label="بحث بالطلبات المعلّقة">
+      <select id="supBoard" aria-label="البورد"></select>
+      <select id="supStage" aria-label="المرحلة"></select>
+      <select id="supRep" aria-label="المندوب"></select>
+      <label class="chk"><input type="checkbox" id="supLate"> المتأخرة بس</label>
+      <button class="btn" id="supRefresh">تحديث</button>
+    </div>
+    <p class="help" style="margin-top:0">كل الطلبات المعلّقة (جديد، حسابات، قرار) بكل البوردات. المتأخرة = 3 أيام أو أكثر بنفس المرحلة.</p>
+    <div id="supOut"></div>
+  </div>
 </main>
 
 <main tabindex="-1" id="viewReports" class="hidden">
