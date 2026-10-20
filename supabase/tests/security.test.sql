@@ -233,8 +233,9 @@ begin
   perform pg_temp.t_ok('محاسب: النقل والخصم والنقاط',
     format('update public.invoices set transport_amt = 50000, ld = true, ld_pct = 5, points = 2 where id = %s', i_acc), 1);
   perform pg_temp.t_ok('محاسب: دين الزبون ورصيده',
-    format($q$update public.invoices set cust_debt = true, debt_amt = 1500, bal_cur = 'both', bal_iqd = 250000, bal_usd = 300 where id = %s$q$, i_acc), 1);
+    format($q$update public.invoices set cust_debt = true, debt_cur = 'both', debt_iqd = 2000000, debt_usd = 1500, bal_cur = 'both', bal_iqd = 250000, bal_usd = 300 where id = %s$q$, i_acc), 1);
   perform pg_temp.t_denied('محاسب: مبلغ الدين ما يكون سالب', format('update public.invoices set debt_amt = -1 where id = %s', i_acc));
+  perform pg_temp.t_denied('محاسب: دين الدولار ما يكون سالب', format('update public.invoices set debt_usd = -1 where id = %s', i_acc));
   perform pg_temp.t_denied('محاسب: عملة الرصيد من القائمة بس', format($q$update public.invoices set bal_cur = 'eur' where id = %s$q$, i_acc));
   perform pg_temp.t_denied('محاسب: ما يرسل بدون كلفة', format('select public.inv_send_to_decision(%s)', i_acc));
   perform pg_temp.t_denied('محاسب: الكلفة لازم أكبر من صفر', format('select public.inv_set_cost(%s, 0)', i_acc));
@@ -246,6 +247,12 @@ begin
   perform pg_temp.t_ok('إلزامية: الأدمن يخلي حالة الزبون إلزامية',
     $q$insert into public.app_settings (key, value) values ('req_fields', 'cust') on conflict (key) do update set value = excluded.value$q$, 1);
   perform pg_temp.as_user(u_acc);
+  perform pg_temp.t_ok('محاسب: يمسح دين الدينار', format('update public.invoices set debt_iqd = null where id = %s', i_acc), 1);
+  perform pg_temp.t_denied('دين: عملة الاثنين بدون دينار ما ينرسل', format('select public.inv_send_to_decision(%s)', i_acc));
+  perform pg_temp.t_ok('محاسب: يرجع دين الدينار', format('update public.invoices set debt_iqd = 2000000 where id = %s', i_acc), 1);
+  perform pg_temp.t_ok('محاسب: يمسح جواب الدين', format('update public.invoices set cust_debt = null where id = %s', i_acc), 1);
+  perform pg_temp.t_denied('إلزامية: بدون جواب الدين ما ينرسل', format('select public.inv_send_to_decision(%s)', i_acc));
+  perform pg_temp.t_ok('محاسب: يرجع جواب الدين', format('update public.invoices set cust_debt = true where id = %s', i_acc), 1);
   perform pg_temp.t_ok('محاسب: يمسح رصيد الدولار', format('update public.invoices set bal_usd = null where id = %s', i_acc), 1);
   perform pg_temp.t_denied('إلزامية: بدون رصيد الدولار ما ينرسل', format('select public.inv_send_to_decision(%s)', i_acc));
   perform pg_temp.t_ok('محاسب: يرجع رصيد الدولار', format('update public.invoices set bal_usd = 300 where id = %s', i_acc), 1);

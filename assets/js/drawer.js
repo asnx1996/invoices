@@ -6,7 +6,7 @@ import { sb, rpc, refreshInvoice } from './api.js';
 import { can } from './can.js';
 import { run, waitingOn, missingBasic, missingTerms } from './actions.js';
 import { avatarHTML } from './avatars.js';
-import { highlightMentions, MENTION_HELP } from './mentions.js';
+import { highlightMentions } from './mentions.js';
 
 // pending: تعديلات مكتوبة بالدرج وما انحفظت بعد (تنحفظ بزر "حفظ التعديلات")
 let extra = { comments: [], log: [], pdfUrl: null, costEdit: false, pending: {}, pendingCost: null, valCur: null, iqd: null };
@@ -230,25 +230,64 @@ function termsHTML(inv) {
       <div class="term-box">${tog('خصم لاحق', 'ld', inv.ld, et)}
         ${inv.ld ? `<div class="grid">${fld('نسبة الخصم %', 'ld_pct', inv.ld_pct, { type: 'number', req: true, dis: et, rer: true })}
           <div class="fld"><div class="help" style="margin-top:28px">مبلغ الخصم: <b>${money(ldAmount(inv))}</b></div></div></div>` : ''}</div>
-      ${custStateHTML(inv, et)}
-      ${fld('ملاحظات', 'notes', inv.notes, { type: 'textarea', dis: et, full: true, help: et ? '' : MENTION_HELP }).replace('data-f="notes"', 'data-f="notes" data-mention="1"')}
-    </div></section>`;
+      ${changesHTML(inv)}
+    </div></section>
+    ${custStateHTML(inv, et)}`;
 }
 
-// حالة الزبون (019): عليه دين؟ وكم، ورصيده بالدينار أو الدولار أو الاثنين
-const BAL_CUR = { iqd: 'دينار', usd: 'دولار', both: 'دينار ودولار' };
-function custStateHTML(inv, dis) {
-  if (!('cust_debt' in inv)) return ''; // قبل ما تتشغل 019
-  const bc = inv.bal_cur, rq = isReq('cust');
-  return `<div class="term-box"><div class="help" style="font-weight:600;margin-bottom:6px">حالة الزبون</div>
-    ${tog('على الزبون دين', 'cust_debt', inv.cust_debt, dis)}
-    <div class="grid">
-      ${inv.cust_debt ? fld(`مبلغ الدين (${cur()})`, 'debt_amt', inv.debt_amt, { type: 'number', req: true, dis, rer: true }) : ''}
-      ${fld('عملة رصيد الزبون', 'bal_cur', bc, { opts: BAL_CUR, req: rq, dis, rer: true })}
-      ${bc === 'iqd' || bc === 'both' ? fld('الرصيد بالدينار (د.ع)', 'bal_iqd', inv.bal_iqd, { type: 'number', req: rq, dis, rer: true }) : ''}
-      ${bc === 'usd' || bc === 'both' ? fld('الرصيد بالدولار ($)', 'bal_usd', inv.bal_usd, { type: 'number', req: rq, dis, rer: true }) : ''}
-    </div></div>`;
+// شنو تغيّر على الطلب من أرسله المندوب للحسابات — من سجل الحركة ("عدّل الحقل: قبل ← بعد")
+// نجمع كل حقل من أول قيمة لآخر قيمة، واللي رجع مثل ما كان ما ينذكر
+function orderChanges() {
+  const log = extra.log;
+  let from = -1;
+  log.forEach((l, i) => { if (l.body === 'أرسل الطلب للحسابات') from = i });
+  if (from < 0) return null;
+  const ch = new Map();
+  for (const l of log.slice(from + 1)) {
+    if (!l.body.startsWith('عدّل ')) continue;
+    for (const part of l.body.slice(5).split('، ')) {
+      const c = part.indexOf(': '), a = part.indexOf(' ← ');
+      if (c < 0 || a < c) continue;
+      const k = part.slice(0, c), o = part.slice(c + 2, a), n = part.slice(a + 3);
+      if (ch.has(k)) ch.get(k).n = n; else ch.set(k, { o, n });
+    }
+  }
+  return [...ch].filter(([, v]) => v.o !== v.n).map(([k, { o, n }]) => {
+    if (k === 'على الزبون دين') return n === 'نعم' ? 'صار على الزبون دين' : n === 'لا' ? 'الزبون ما عليه دين' : 'انمسح جواب الدين';
+    if (['نعم', 'لا'].includes(n) && ['نعم', 'لا', '—'].includes(o)) return n === 'نعم' ? `انضاف ${k}` : `انشال ${k}`;
+    if (o === '—') return `تحدد ${k}: <b>${esc(n)}</b>`;
+    if (n === '—') return `انمسح ${k} (كان ${esc(o)})`;
+    return `تغيّر ${k} من <b>${esc(o)}</b> إلى <b>${esc(n)}</b>`;
+  });
 }
+function changesHTML(inv) {
+  if (inv.stage === 'new') return '';
+  const list = orderChanges();
+  if (!list) return '';
+  return `<div class="term-box"><div class="help" style="font-weight:600;margin-bottom:6px">${ic('back')} شنو تغيّر على الطلب من أرسله المندوب</div>
+    ${list.length ? `<ul style="margin:0;padding-inline-start:18px;line-height:1.9">${list.map(x => `<li>${x}</li>`).join('')}</ul>` : '<div class="help">ما تغيّر شي — نفس اللي أرسله المندوب.</div>'}</div>`;
+}
+
+// حالة الزبون (019/021) قسم وحده: عليه دين؟ نعم/لا، وإذا نعم عملته ومبلغه. والرصيد دائماً
+const BAL_CUR = { iqd: 'دينار', usd: 'دولار', both: 'دينار ودولار' };
+// مبلغ لكل عملة: p = 'debt' أو 'bal'
+const amounts = (p, pre, inv, req, dis) => { const c = inv[p + '_cur'];
+  return (c === 'iqd' || c === 'both' ? fld(`${pre} بالدينار (د.ع)`, p + '_iqd', inv[p + '_iqd'], { type: 'number', req, dis, rer: true }) : '')
+    + (c === 'usd' || c === 'both' ? fld(`${pre} بالدولار ($)`, p + '_usd', inv[p + '_usd'], { type: 'number', req, dis, rer: true }) : '') };
+function custStateHTML(inv, dis) {
+  if (!('debt_cur' in inv)) return ''; // قبل ما تتشغل 021
+  const rq = isReq('cust'), d = inv.cust_debt, chg = pendingHas('cust_debt');
+  const yn = [[true, 'نعم'], [false, 'لا']].map(([v, t]) => `<label class="chk"><input type="radio" name="cust_debt" data-f="cust_debt" data-rer="1" value="${v}" ${d === v ? 'checked' : ''} ${dis ? 'disabled' : ''}> ${t}</label>`).join('');
+  return `<section class="blk"><h4>حالة الزبون ${dis ? `<span class="lock">${ic('lock')}يعدلها المحاسب</span>` : ''}</h4>
+    <div class="grid">
+      <div class="fld full${chg ? ' chg' : ''}"><label>هل على الزبون دين؟${rq ? ' <span class="req">*</span>' : ''}</label>
+        <div role="radiogroup" aria-label="هل على الزبون دين" style="display:flex;gap:8px;flex-wrap:wrap">${yn}</div>${chg ? `<div class="was">${ic('back')}قبل: <b>${esc(wasDebt())}</b></div>` : ''}</div>
+      ${d ? `<div class="term-box"><div class="grid">${fld('عملة الدين', 'debt_cur', inv.debt_cur, { opts: BAL_CUR, req: true, dis, rer: true })}<div></div>${amounts('debt', 'الدين', inv, true, dis)}</div></div>` : ''}
+      <div class="term-box"><div class="help" style="font-weight:600;margin-bottom:6px">رصيد الزبون</div><div class="grid">
+        ${fld('عملة الرصيد', 'bal_cur', inv.bal_cur, { opts: BAL_CUR, req: rq, dis, rer: true })}<div></div>${amounts('bal', 'الرصيد', inv, rq, dis)}</div></div>
+    </div></section>`;
+}
+const wasDebt = () => { const v = (getInv(S.drawerId) || {}).cust_debt; return v == null ? 'ما انجاوب' : v ? 'نعم' : 'لا' };
 
 // الربح: إذا اكو تعديلات ما انحفظت، نحسب النتيجة الجديدة بالمتصفح ونبينها جنب القديمة (نفس معادلة inv_profit_rows)
 function profitHTML(inv) {
@@ -604,7 +643,7 @@ export function initDrawer() {
     let val = el.type === 'checkbox' ? el.checked : el.value;
     // الحقول النصية بالقاعدة ما تقبل null، الفارغ ينحفظ ''
     if (val === '' && !['quote_no', 'res_no', 'notes'].includes(col)) val = null;
-    if (['value', 'transport_amt', 'ld_pct', 'points', 'credit_months', 'disc_pct', 'debt_amt', 'bal_iqd', 'bal_usd'].includes(col)) val = val === null ? null : num(val);
+    if (['value', 'transport_amt', 'ld_pct', 'points', 'credit_months', 'disc_pct', 'debt_iqd', 'debt_usd', 'bal_iqd', 'bal_usd'].includes(col)) val = val === null ? null : num(val);
     if (col === 'points' && val === null) val = 0;
     const patch = { [col]: val };
     // تنظيف الحقول التابعة
@@ -612,8 +651,11 @@ export function initDrawer() {
     if (col === 'payer' && val !== 'customer') patch.transport_amt = 0;
     if (col === 'ld' && !val) patch.ld_pct = null;
     if (col === 'disc_req' && !val) patch.disc_pct = null;
-    if (col === 'cust_debt' && !val) patch.debt_amt = null;
-    if (col === 'bal_cur') { if (val !== 'iqd' && val !== 'both') patch.bal_iqd = null; if (val !== 'usd' && val !== 'both') patch.bal_usd = null }
+    if (col === 'cust_debt') { patch.cust_debt = val = val === 'true'; if (!val) Object.assign(patch, { debt_cur: null, debt_iqd: null, debt_usd: null }) }
+    for (const p of ['bal', 'debt']) if (col === p + '_cur') {
+      if (val !== 'iqd' && val !== 'both') patch[p + '_iqd'] = null;
+      if (val !== 'usd' && val !== 'both') patch[p + '_usd'] = null;
+    }
     stage(inv, patch, !!el.dataset.rer || Object.keys(patch).length > 1);
   });
 }

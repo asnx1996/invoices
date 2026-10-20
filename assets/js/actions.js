@@ -33,8 +33,13 @@ export function missingTerms(inv) {
   if (inv.payer === 'customer' && num(inv.transport_amt) <= 0) m.push('مبلغ أجور النقل');
   if (inv.ld && (num(inv.ld_pct) <= 0 || num(inv.ld_pct) > 100)) m.push('نسبة الخصم اللاحق');
   if (isReq('cost') && !inv.cost_set) m.push('سعر الكلفة');
-  if (inv.cust_debt && num(inv.debt_amt) <= 0) m.push('مبلغ دين الزبون');
-  if (isReq('cust') && 'bal_cur' in inv) {
+  if ('debt_cur' in inv) {
+    if (inv.cust_debt && !inv.debt_cur) m.push('عملة دين الزبون');
+    if (inv.cust_debt && ['iqd', 'both'].includes(inv.debt_cur) && num(inv.debt_iqd) <= 0) m.push('دين الزبون بالدينار');
+    if (inv.cust_debt && ['usd', 'both'].includes(inv.debt_cur) && num(inv.debt_usd) <= 0) m.push('دين الزبون بالدولار');
+  }
+  if (isReq('cust') && 'debt_cur' in inv) {
+    if (inv.cust_debt == null) m.push('هل على الزبون دين؟ (نعم أو لا)');
     if (!inv.bal_cur) m.push('عملة رصيد الزبون');
     if (['iqd', 'both'].includes(inv.bal_cur) && inv.bal_iqd == null) m.push('رصيد الزبون بالدينار');
     if (['usd', 'both'].includes(inv.bal_cur) && inv.bal_usd == null) m.push('رصيد الزبون بالدولار');
