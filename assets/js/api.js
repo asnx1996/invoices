@@ -2,8 +2,12 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 import { S, changed, hasRole, hasPerm, getBoard, DEFAULT_ROLE_DEFS } from './state.js';
 import { toast, DAY, setCurrency, setRate } from './util.js';
 
-export const configured = /^https:\/\/.+\.supabase\.co$/.test(SUPABASE_URL) && SUPABASE_ANON_KEY.length > 40;
-export const sb = configured ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+import { createLocalClient } from './local-client.js';
+
+// النسخة المحلية (برنامج الحاسبة): السيرفر يعرّف window.__LOCAL_API__ وكلشي يروح له بدل Supabase
+export const LOCAL = !!window.__LOCAL_API__;
+export const configured = LOCAL || (/^https:\/\/.+\.supabase\.co$/.test(SUPABASE_URL) && SUPABASE_ANON_KEY.length > 40);
+export const sb = LOCAL ? createLocalClient(window.__LOCAL_API__) : configured ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 
 // الفترة المحمّلة: الطلبات الشغالة دائماً + المغلقة خلال هاي الأيام (0 = الكل)
 let rangeDays = 90;
