@@ -60,6 +60,23 @@ export async function hasUsers() {
   return !!await r.one(sql`select top 1 1 x from users`);
 }
 
+// للحاسبة الرئيسية فقط (من قائمة البرنامج): كل الحسابات + تغيير رمز أي حساب بدون الرمز القديم
+export async function listAccounts() {
+  const r = await db();
+  return (await r.query(sql`select u.login, p.full_name, p.roles, p.active from users u join profiles p on p.id = u.id order by p.full_name`))
+    .map(x => ({ login: x.login.replace(/@invoices\.local$/, ''), full_name: x.full_name, admin: JSON.parse(x.roles).includes('admin'), active: x.active }));
+}
+
+export async function resetPassword(name, password) {
+  if (String(password || '').length < 8) throw new Error('الرمز لازم 8 أحرف على الأقل');
+  const r = await db();
+  const u = await r.one(sql`select id from users where login = ${loginEmail(name)}`);
+  if (!u) throw new Error('الحساب غير موجود');
+  await r.exec(sql`update users set pass_hash = ${await hashPassword(password)}, updated_at = sysutcdatetime() where id = ${u.id}`);
+  await r.exec(sql`delete from sessions where user_id = ${u.id}`);   // يطلع من كل الأجهزة
+  return u.id;
+}
+
 export async function createAdmin(name, password, fullName) {
   if (String(password || '').length < 8) throw new Error('الرمز لازم 8 أحرف على الأقل');
   const r = await db();

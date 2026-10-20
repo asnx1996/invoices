@@ -85,6 +85,7 @@ function makeTray() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'فتح البرنامج', click: () => { win.show(); win.focus() } },
     { label: 'عناوين الشبكة', click: () => showAddresses() },
+    { label: 'تغيير رمز حساب', click: () => openPasswords() },
     { type: 'separator' },
     { label: 'إيقاف وخروج', click: () => { quitting = true; app.quit() } },
   ]));
@@ -149,6 +150,23 @@ ipcMain.handle('setup:server', async (_e, { instance, adminName, adminPass, full
   return { log, addresses: server.addresses };
 });
 
+// ---------------------------------------------------------------- رموز الحسابات (الحاسبة الرئيسية فقط)
+let pwWin = null;
+function openPasswords() {
+  if (readSettings().mode !== 'server') {
+    return dialog.showMessageBox(win, { type: 'info', title: 'تغيير رمز حساب', message: 'هذا الخيار بالحاسبة الرئيسية بس.', detail: 'من هاي الحاسبة: الأدمن يغير رمز أي موظف من تبويب المستخدمين.' });
+  }
+  if (pwWin) return pwWin.focus();
+  pwWin = new BrowserWindow({ width: 460, height: 520, parent: win, modal: true, resizable: false, icon: ICON, autoHideMenuBar: true, title: 'تغيير رمز حساب',
+    backgroundColor: '#0b1020', webPreferences: { preload: join(HERE, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  pwWin.setMenu(null);
+  pwWin.on('closed', () => { pwWin = null });
+  pwWin.loadFile(join(HERE, 'passwords.html'));
+}
+const mainOnly = () => { if (readSettings().mode !== 'server') throw new Error('بالحاسبة الرئيسية بس') };
+ipcMain.handle('accounts:list', async () => { mainOnly(); await startServer(); return (await serverMod('install.js')).listAccounts() });
+ipcMain.handle('accounts:reset', async (_e, { login, password }) => { mainOnly(); await startServer(); await (await serverMod('install.js')).resetPassword(login, password); return true });
+
 ipcMain.handle('setup:reset', async () => { saveSettings({}); await openSetup(); return true });
 
 // ---------------------------------------------------------------- تشغيل
@@ -164,7 +182,8 @@ else {
             title: 'إعدادات الاتصال', message: 'ترجع لشاشة الإعداد؟', detail: 'البيانات ما تنحذف. بس تختار من جديد: حاسبة رئيسية أو فرعية.' });
           if (r.response === 1) { saveSettings({}); openSetup() }
         } },
-        { label: 'عناوين الشبكة', click: () => showAddresses(), visible: true },
+        { label: 'عناوين الشبكة', click: () => showAddresses() },
+        { label: 'تغيير رمز حساب (الحاسبة الرئيسية)', click: () => openPasswords() },
         { type: 'separator' },
         { label: 'تكبير', role: 'zoomIn' }, { label: 'تصغير', role: 'zoomOut' }, { label: 'الحجم الطبيعي', role: 'resetZoom' },
         { label: 'أدوات المطور', accelerator: 'Ctrl+Shift+I', click: () => win.webContents.toggleDevTools() },

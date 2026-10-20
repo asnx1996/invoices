@@ -27,7 +27,8 @@
       "main.js",
       "preload.cjs",
       "setup.html",
-      "package.json"
+      "package.json",
+      "passwords.html"
     ],
     "extraResources": [
       {
