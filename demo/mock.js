@@ -203,8 +203,16 @@
     return out;
   }
   // منو دوره بهاي المرحلة (نفس turn_users بـ 008)
+  // مراحل القرار (022): app_settings.stages — بدونه المدير ← الزبون ← المخزن
+  const STEPS = () => { const r = db.app_settings.find(x => x.key === 'stages'); try { const j = r && JSON.parse(r.value); if (Array.isArray(j)) return j } catch (e) { } return [{ k: 'mgr', on: true }, { k: 'cust', on: true }, { k: 'wh', on: true }] };
+  const nextStep = cur => { const L = STEPS(), at = cur == null ? -1 : L.findIndex(e => e.k === cur); return (L.slice(at + 1).find(e => e.on !== false) || {}).k || null };
+  const stepName = k => String((STEPS().find(e => e.k === k) || {}).n || '').trim() || { mgr: 'موافقة المدير', cust: 'رد الزبون', wh: 'المخزن' }[k] || k;
+  const placeName = k => ({ new: 'طلب جديد', acc: 'الحسابات', cancel: 'ملغاة', done: 'تمت' })[k] || stepName(String(k).split(':')[1]);
+  const rolePerm = (uid, p) => { const u = db.profiles.find(x => x.id === uid); return !!u && u.active && db.role_defs.some(d => [...u.roles, ...(u.xroles || [])].includes(d.key) && d.perms.includes(p)) };
+  const hasPerm = p => has('admin') || rolePerm(session, p);
   const turnUsers = (stage, sub, rep) => {
     if (stage === 'new' || (stage === 'decision' && sub === 'cust')) return rep ? [rep] : [];
+    if (stage === 'decision' && /^s_/.test(sub || '')) return db.profiles.filter(p => rolePerm(p.id, sub)).map(p => p.id);
     const role = stage === 'acc' ? 'acc' : stage === 'decision' ? { mgr: 'mgr', wh: 'wh' }[sub] : null;
     return role ? db.profiles.filter(p => p.active && p.roles.includes(role)).map(p => p.id) : [];
   };
@@ -354,6 +362,12 @@
       if (this.op === 'upsert') {
         if (t !== 'app_settings' || !has('admin')) return err('ما عندك صلاحية', '42501');
         const r = db.app_settings.find(x => x.key === this.payload.key);
+        if (this.payload.key === 'stages') {
+          const keys = JSON.parse(this.payload.value).map(e => e.k);
+          const gone = r ? JSON.parse(r.value).filter(e => !keys.includes(e.k)) : [];
+          for (const g of gone) { const n = db.invoices.filter(i => i.stage === 'decision' && i.sub === g.k && !i.deleted_at).length; if (n) return err(`ما تكدر تحذف مرحلة "${g.n || g.k}" — بيها ${n} طلب`) }
+          db.role_defs.forEach(d => { d.perms = d.perms.filter(x => !/^s_/.test(x) || keys.includes(x)) });
+        }
         if (r) Object.assign(r, this.payload); else db.app_settings.push({ ...this.payload });
         save(); return { data: null, error: null };
       }
@@ -408,6 +422,8 @@
     if (['done', 'cancel'].includes(stage)) v.closed_at = v.stage_at;
     stageLog(v); addLog(v.id, body);
   }
+  // الخطوة المفعّلة اللي بعد from، أو يكتمل الطلب
+  function advance(v, from, body) { const n = nextStep(from); move(v, n ? 'decision' : 'done', n, body) }
   function profitRows() {
     return db.invoices.map(i => {
       const c = db.invoice_costs.find(x => x.invoice_id === i.id); if (!c) return null;
@@ -439,13 +455,13 @@
       if (v.payer === 'customer' && !(+v.transport_amt > 0)) throw new Error('اكتب مبلغ أجور النقل');
       if (v.ld && (!(+v.ld_pct > 0) || +v.ld_pct > 100)) throw new Error('اكتب نسبة الخصم اللاحق');
       if (!v.cost_set) throw new Error('اكتب سعر الكلفة');
-      move(v, 'decision', 'mgr', 'أرسل الطلب للقرار'); return v;
+      advance(v, null, 'أرسل الطلب للقرار'); return v;
     },
     inv_approve({ p_id }) {
       const v = getInvFor(p_id);
       if (v.stage !== 'decision' || v.sub !== 'mgr') throw new Error('الطلب مو بانتظار موافقة المدير');
       if (!(has('mgr') || has('admin'))) throw new Error('الموافقة للمدير فقط');
-      move(v, 'decision', 'cust', 'وافق المدير على الشروط'); return v;
+      advance(v, 'mgr', 'وافق المدير على الشروط'); return v;
     },
     inv_return_to_acc({ p_id, p_reason }) {
       const v = getInvFor(p_id);
@@ -464,20 +480,19 @@
       move(v, 'new', null, 'أرجع الطلب للمندوب'); return v;
     },
     inv_move({ p_id, p_target, p_reason }) {
-      const NAMES = { new: 'طلب جديد', acc: 'الحسابات', 'decision:mgr': 'موافقة المدير', 'decision:cust': 'رد الزبون', 'decision:wh': 'المخزن', cancel: 'ملغاة', done: 'تمت' };
-      const ORD = { new: 1, acc: 2, 'decision:mgr': 3, 'decision:cust': 4, 'decision:wh': 5 };
+      const ORD = { new: 1, acc: 2, ...Object.fromEntries(STEPS().map((e, i) => ['decision:' + e.k, i + 3])) };
       if (!(has('admin') || has('mgr'))) throw new Error('نقل الطلب للأدمن والمدير فقط');
-      if (!['new', 'acc', 'decision:mgr', 'decision:cust', 'decision:wh', 'cancel'].includes(p_target)) throw new Error('مرحلة غير معروفة');
+      if (!(['new', 'acc', 'cancel'].includes(p_target) || (String(p_target).startsWith('decision:') && ORD[p_target]))) throw new Error('مرحلة غير معروفة');
       const v = getInvFor(p_id);
       const from = v.stage + (v.sub ? ':' + v.sub : '');
       if (from === p_target) throw new Error('الطلب أصلاً بهاي المرحلة');
       const [stage, sub = null] = p_target.split(':');
-      if ((ORD[p_target] || 6) < (ORD[from] || 0)) v.returned = (v.returned || 0) + 1;
+      if ((ORD[p_target] || 99) < (ORD[from] || 0)) v.returned = (v.returned || 0) + 1;
       if (v.stage === 'done') v.sales_no = null;
       v.cancel_reason = stage === 'cancel' && !blank(p_reason) ? p_reason.trim() : null;
       v.closed_at = null;
-      db.invoice_comments.push({ id: db.seq.invoice_comments++, invoice_id: v.id, author: session, body: `نقل من ${NAMES[from] || from} إلى ${NAMES[p_target]}${blank(p_reason) ? '' : ': ' + p_reason.trim()}`, is_system: true, at: iso(Date.now()) });
-      move(v, stage, sub, 'نقل الطلب إلى ' + NAMES[p_target]); return v;
+      db.invoice_comments.push({ id: db.seq.invoice_comments++, invoice_id: v.id, author: session, body: `نقل من ${placeName(from)} إلى ${placeName(p_target)}${blank(p_reason) ? '' : ': ' + p_reason.trim()}`, is_system: true, at: iso(Date.now()) });
+      move(v, stage, sub, 'نقل الطلب إلى ' + placeName(p_target)); return v;
     },
     comment_edit({ p_id, p_body }) {
       const c = db.invoice_comments.find(x => x.id === p_id); if (!c) throw new Error('التعليق غير موجود');
@@ -495,7 +510,7 @@
       const v = getInvFor(p_id);
       if (v.stage !== 'decision' || v.sub !== 'cust') throw new Error('الطلب مو بانتظار رد الزبون');
       if (!(has('mgr') || has('admin') || (has('rep') && v.rep_id === session))) throw new Error('ما عندك صلاحية');
-      move(v, 'decision', 'wh', 'أكد موافقة الزبون'); return v;
+      advance(v, 'cust', 'أكد موافقة الزبون'); return v;
     },
     inv_customer_refuse({ p_id, p_reason }) {
       const v = getInvFor(p_id);
@@ -509,7 +524,28 @@
       if (v.stage !== 'decision' || v.sub !== 'wh') throw new Error('الطلب مو بانتظار المخزن');
       if (!(has('wh') || has('mgr') || has('admin'))) throw new Error('التحويل للمخزن أو المدير');
       if (blank(p_sales_no)) throw new Error('رقم المبيعات مطلوب');
-      v.sales_no = p_sales_no.trim(); move(v, 'done', null, 'حول الطلب لمبيعات برقم ' + v.sales_no); return v;
+      v.sales_no = p_sales_no.trim(); advance(v, 'wh', 'حول الطلب لمبيعات برقم ' + v.sales_no); return v;
+    },
+    inv_step_pass({ p_id }) {
+      const v = getInvFor(p_id), k = v.sub;
+      if (v.stage !== 'decision' || !/^s_/.test(k || '')) throw new Error('الطلب مو بهاي المرحلة');
+      if (!hasPerm(k)) throw new Error('ما عندك صلاحية مرحلة ' + stepName(k));
+      advance(v, k, 'أكمل مرحلة ' + stepName(k)); return v;
+    },
+    inv_step_back({ p_id, p_reason }) {
+      const v = getInvFor(p_id), k = v.sub;
+      if (v.stage !== 'decision' || !/^s_/.test(k || '')) throw new Error('الطلب مو بهاي المرحلة');
+      if (!(STEPS().find(e => e.k === k) || {}).back) throw new Error('هاي المرحلة ما ترجع للحسابات');
+      if (!hasPerm(k)) throw new Error('ما عندك صلاحية مرحلة ' + stepName(k));
+      v.returned = (v.returned || 0) + 1;
+      db.invoice_comments.push({ id: db.seq.invoice_comments++, invoice_id: v.id, author: session, body: 'إرجاع للحسابات من ' + stepName(k) + (blank(p_reason) ? '' : ': ' + p_reason.trim()), is_system: true, at: iso(Date.now()) });
+      move(v, 'acc', null, 'أرجع الطلب للحسابات من ' + stepName(k)); return v;
+    },
+    stage_counts() {
+      if (!has('admin')) return [];
+      const c = {};
+      db.invoices.filter(i => i.stage === 'decision' && !i.deleted_at).forEach(i => { c[i.sub] = (c[i.sub] || 0) + 1 });
+      return Object.entries(c).map(([k, n]) => ({ k, n }));
     },
     inv_set_urgent({ p_id, p_on }) {
       const v = getInvFor(p_id);

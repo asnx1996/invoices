@@ -101,6 +101,7 @@ declare
   b2 bigint; i_b2 bigint;
   i_new1 bigint; i_new2 bigint; i_new3 bigint; i_acc bigint; i_acc2 bigint; i_dec bigint; i_wh bigint;
   new_user uuid;
+  i_st1 bigint; i_st2 bigint; i_st3 bigint;
   msg text;
 begin
   perform set_config('tst.pass', '0', false);
@@ -722,6 +723,65 @@ begin
     $q$insert into public.app_settings (key, value) values ('opt_fields', 'pdf') on conflict (key) do update set value = excluded.value$q$, 1);
   perform pg_temp.as_user(u_rep1);
   perform pg_temp.t_ok('إلزامية: ينرسل بدون PDF', format('select public.inv_send_to_acc(%s)', i_new2));
+
+  -- 022: مراحل يتحكم بيها الأدمن
+  perform pg_temp.as_owner();
+  insert into public.invoices (rep_id, customer_id, quote_no, value, stage, sub) values (u_rep1, c1, 'Q-st1', 10, 'decision', 'cust') returning id into i_st1;
+  insert into public.invoices (rep_id, customer_id, quote_no, value, stage, sub) values (u_rep1, c1, 'Q-st2', 10, 'decision', 'cust') returning id into i_st2;
+  perform pg_temp.as_user(u_mgr);
+  perform pg_temp.t_denied('مراحل: المدير ما يغير المراحل',
+    $q$insert into public.app_settings (key, value) values ('stages', '[]') on conflict (key) do update set value = excluded.value$q$);
+  perform pg_temp.as_user(u_admin);
+  perform pg_temp.t_denied('مراحل: ما تنحذف مرحلة أساسية',
+    $q$insert into public.app_settings (key, value) values ('stages', '[{"k":"mgr"},{"k":"cust"}]') on conflict (key) do update set value = excluded.value$q$);
+  perform pg_temp.t_denied('مراحل: مفتاح غلط يرفض',
+    $q$insert into public.app_settings (key, value) values ('stages', '[{"k":"mgr"},{"k":"cust"},{"k":"wh"},{"k":"Bad Key"}]') on conflict (key) do update set value = excluded.value$q$);
+  perform pg_temp.t_denied('مراحل: المرحلة الجديدة تحتاج اسم',
+    $q$insert into public.app_settings (key, value) values ('stages', '[{"k":"mgr"},{"k":"cust"},{"k":"s_a"},{"k":"wh"}]') on conflict (key) do update set value = excluded.value$q$);
+  perform pg_temp.t_ok('مراحل: الأدمن يضيف التدقيق بين الزبون والمخزن',
+    $q$insert into public.app_settings (key, value) values ('stages', '[{"k":"mgr","on":true},{"k":"cust","on":true},{"k":"s_audit","n":"التدقيق","on":true,"back":true},{"k":"wh","on":true}]') on conflict (key) do update set value = excluded.value$q$, 1);
+  perform pg_temp.t_ok('مراحل: صلاحية المرحلة تنعطى لدور', $q$update public.role_defs set perms = perms || '{s_audit}' where key = 'acc'$q$, 1);
+  perform pg_temp.t_denied('مراحل: صلاحية مرحلة بمفتاح غلط ترفض', $q$update public.role_defs set perms = perms || '{s_X}' where key = 'acc'$q$);
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_ok('مراحل: موافقة الزبون', format('select public.inv_customer_accept(%s)', i_st1));
+  perform pg_temp.t_eq('مراحل: بعد الزبون يروح للتدقيق', format('select sub from public.invoices where id = %s', i_st1), 's_audit');
+  perform pg_temp.t_denied('مراحل: المندوب ما يكمل التدقيق', format('select public.inv_step_pass(%s)', i_st1));
+  perform pg_temp.as_user(u_wh);
+  perform pg_temp.t_denied('مراحل: المخزن ما يحول قبل التدقيق', format('select public.inv_complete(%s, %L)', i_st1, 'S-9'));
+  perform pg_temp.as_user(u_acc);
+  perform pg_temp.t_ok('مراحل: صاحب الصلاحية يكمل التدقيق', format('select public.inv_step_pass(%s)', i_st1));
+  perform pg_temp.t_eq('مراحل: بعد التدقيق المخزن', format('select sub from public.invoices where id = %s', i_st1), 'wh');
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_ok('مراحل: طلب ثاني للتدقيق', format('select public.inv_customer_accept(%s)', i_st2));
+  perform pg_temp.as_user(u_acc);
+  perform pg_temp.t_ok('مراحل: التدقيق يرجع للحسابات', format('select public.inv_step_back(%s, %L)', i_st2, 'ناقص'));
+  perform pg_temp.t_eq('مراحل: رجع للحسابات', format('select stage::text || returned from public.invoices where id = %s', i_st2), 'acc1');
+  perform pg_temp.as_user(u_mgr);
+  perform pg_temp.t_ok('مراحل: المدير ينقل للتدقيق', format('select public.inv_move(%s, %L)', i_st2, 'decision:s_audit'));
+  perform pg_temp.t_denied('مراحل: ما ينقل لمرحلة مو موجودة', format('select public.inv_move(%s, %L)', i_st2, 'decision:s_zz'));
+  perform pg_temp.as_user(u_admin);
+  perform pg_temp.t_denied('مراحل: ما تنحذف مرحلة بيها طلبات',
+    $q$update public.app_settings set value = '[{"k":"mgr"},{"k":"cust"},{"k":"wh"}]' where key = 'stages'$q$);
+  perform pg_temp.t_ok('مراحل: الأدمن يطفي المدير والمخزن',
+    $q$update public.app_settings set value = '[{"k":"mgr","on":false},{"k":"cust","on":true},{"k":"s_audit","n":"التدقيق","on":true},{"k":"wh","on":false}]' where key = 'stages'$q$, 1);
+  perform pg_temp.as_user(u_acc);
+  perform pg_temp.t_ok('مراحل: التدقيق آخر مرحلة يكمل الطلب', format('select public.inv_step_pass(%s)', i_st2));
+  perform pg_temp.t_eq('مراحل: الطلب تمت', format('select stage::text from public.invoices where id = %s', i_st2), 'done');
+  perform pg_temp.t_denied('مراحل: الإرجاع ممنوع إذا الأدمن ما سمح', format('select public.inv_step_back(%s, null)', i_st2));
+  perform pg_temp.as_owner();
+  insert into public.invoices (rep_id, customer_id, quote_no, value, stage, payment, payer, cost_set, cust_debt, bal_cur, bal_usd)
+    values (u_rep1, c1, 'Q-st3', 10, 'acc', 'cash', 'none', true, false, 'usd', 0) returning id into i_st3;
+  perform pg_temp.as_user(u_acc);
+  perform pg_temp.t_ok('مراحل: الإرسال للقرار والمدير مطفي', format('select public.inv_send_to_decision(%s)', i_st3));
+  perform pg_temp.t_eq('مراحل: يروح لرد الزبون مباشرة', format('select sub from public.invoices where id = %s', i_st3), 'cust');
+  perform pg_temp.as_user(u_wh);
+  perform pg_temp.t_ok('مراحل: المخزن المطفي يكمل طلباته القديمة', format('select public.inv_complete(%s, %L)', i_st1, 'S-10'));
+  perform pg_temp.as_user(u_admin);
+  perform pg_temp.t_ok('مراحل: حذف التدقيق (فاضي)',
+    $q$update public.app_settings set value = '[{"k":"mgr","on":true},{"k":"cust","on":true},{"k":"wh","on":true}]' where key = 'stages'$q$, 1);
+  perform pg_temp.t_eq('مراحل: صلاحية المرحلة المحذوفة تنشال', $q$select ('s_audit' = any(perms))::text from public.role_defs where key = 'acc'$q$, 'false');
+  perform pg_temp.t_eq('مراحل: عدد الطلبات بكل مرحلة للأدمن', format('select n::text from public.stage_counts() where k = %L', 'cust'),
+    (select count(*)::text from public.invoices where stage = 'decision' and sub = 'cust' and deleted_at is null));
 
   -- ---------------- النتيجة ----------------
   perform pg_temp.as_owner();

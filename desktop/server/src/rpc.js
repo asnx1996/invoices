@@ -4,6 +4,7 @@ import { sql, join } from './db.js';
 import {
   fail, perm, inBoard, needActive, canSee, getInvoice, addLog, addComment, updateInvoice, fields, profitRow,
   fromDb, loadUser, notify, profileBeforeWrite, ACTIVE_STAGES, invoiceVisible,
+  stageList, stageNext, stageName, stageLabel, stageBackOk,
 } from './rules.js';
 import { hashPassword, loginEmail } from './auth.js';
 import { purgeInvoiceRows } from './query.js';
@@ -20,6 +21,12 @@ async function lockInvoice(r, id) {
 
 // تعديل مرحلة من إجراء + بث
 const setStage = (r, ctx, id, patch) => updateInvoice(r, ctx, id, { ...patch, stage_at: new Date() });
+
+// inv_advance: من خطوة القرار from للخطوة المفعّلة اللي بعدها، أو يكتمل الطلب (022)
+async function advance(r, ctx, id, from, extra = {}) {
+  const nx = stageNext(await stageList(r), from);
+  return setStage(r, ctx, id, nx ? { stage: 'decision', sub: nx, ...extra } : { stage: 'done', sub: null, closed_at: new Date(), ...extra });
+}
 
 export const RPC = {
   // ------------------------------------------------------------ مراحل الطلب
@@ -62,7 +69,7 @@ export const RPC = {
       if (['iqd', 'both'].includes(v.bal_cur) && v.bal_iqd == null) fail('اكتب رصيد الزبون بالدينار');
       if (['usd', 'both'].includes(v.bal_cur) && v.bal_usd == null) fail('اكتب رصيد الزبون بالدولار');
     }
-    const nw = await setStage(r, ctx, p_id, { stage: 'decision', sub: 'mgr' });
+    const nw = await advance(r, ctx, p_id, null);
     await addLog(r, u, p_id, 'أرسل الطلب للقرار');
     return nw;
   },
@@ -72,7 +79,7 @@ export const RPC = {
     const v = await lockInvoice(r, p_id);
     if (v.stage !== 'decision' || v.sub !== 'mgr') fail('الطلب مو بانتظار موافقة المدير');
     if (!perm(u, 'approve')) fail('الموافقة للمدير فقط');
-    const nw = await setStage(r, ctx, p_id, { sub: 'cust' });
+    const nw = await advance(r, ctx, p_id, 'mgr');
     await addLog(r, u, p_id, 'وافق المدير على الشروط');
     return nw;
   },
@@ -104,7 +111,7 @@ export const RPC = {
     const v = await lockInvoice(r, p_id);
     if (v.stage !== 'decision' || v.sub !== 'cust') fail('الطلب مو بانتظار رد الزبون');
     if (!(perm(u, 'cust_all') || (perm(u, 'create') && v.rep_id === u.uid))) fail('ما عندك صلاحية');
-    const nw = await setStage(r, ctx, p_id, { sub: 'wh' });
+    const nw = await advance(r, ctx, p_id, 'cust');
     await addLog(r, u, p_id, 'أكد موافقة الزبون');
     return nw;
   },
@@ -126,31 +133,61 @@ export const RPC = {
     if (v.stage !== 'decision' || v.sub !== 'wh') fail('الطلب مو بانتظار المخزن');
     if (!perm(u, 'complete')) fail('التحويل للمخزن أو المدير');
     if (!trim(p_sales_no)) fail('رقم المبيعات مطلوب');
-    const nw = await setStage(r, ctx, p_id, { stage: 'done', sub: null, sales_no: trim(p_sales_no), closed_at: new Date() });
+    const nw = await advance(r, ctx, p_id, 'wh', { sales_no: trim(p_sales_no) });
     await addLog(r, u, p_id, 'حول الطلب لمبيعات برقم ' + trim(p_sales_no));
     return nw;
+  },
+
+  // الخطوات الإضافية: "تم" ينقلها للي بعدها، و"إرجاع" للحسابات (إذا الأدمن سمح)
+  async inv_step_pass(r, ctx, { p_id }) {
+    const u = ctx.user; needActive(u);
+    const v = await lockInvoice(r, p_id), list = await stageList(r), k = v.sub;
+    if (v.stage !== 'decision' || !/^s_/.test(k || '')) fail('الطلب مو بهاي المرحلة');
+    if (!perm(u, k)) fail('ما عندك صلاحية مرحلة ' + stageName(list, k));
+    const nw = await advance(r, ctx, p_id, k);
+    await addLog(r, u, p_id, 'أكمل مرحلة ' + stageName(list, k));
+    return nw;
+  },
+
+  async inv_step_back(r, ctx, { p_id, p_reason }) {
+    const u = ctx.user; needActive(u);
+    const v = await lockInvoice(r, p_id), list = await stageList(r), k = v.sub;
+    if (v.stage !== 'decision' || !/^s_/.test(k || '')) fail('الطلب مو بهاي المرحلة');
+    if (!stageBackOk(list, k)) fail('هاي المرحلة ما ترجع للحسابات');
+    if (!perm(u, k)) fail('ما عندك صلاحية مرحلة ' + stageName(list, k));
+    const nw = await setStage(r, ctx, p_id, { stage: 'acc', sub: null, returned: (v.returned || 0) + 1 });
+    await addComment(r, ctx, p_id, 'إرجاع للحسابات من ' + stageName(list, k) + (trim(p_reason) ? ': ' + trim(p_reason) : ''), true);
+    await addLog(r, u, p_id, 'أرجع الطلب للحسابات من ' + stageName(list, k));
+    return nw;
+  },
+
+  // عدد الطلبات الشغالة بكل خطوة بكل البوردات (صفحة الإعدادات — للأدمن)
+  async stage_counts(r, ctx) {
+    if (!ctx.user.admin) return [];
+    return r.query(sql`select sub k, count(*) n from invoices where stage = 'decision' and deleted_at is null group by sub`);
   },
 
   async inv_move(r, ctx, { p_id, p_target, p_reason }) {
     const u = ctx.user; needActive(u);
     if (!perm(u, 'move')) fail('ما عندك صلاحية نقل الطلب');
-    const names = { new: 'طلب جديد', acc: 'الحسابات', 'decision:mgr': 'موافقة المدير', 'decision:cust': 'رد الزبون', 'decision:wh': 'المخزن', cancel: 'ملغاة', done: 'تمت' };
-    const order = { new: 1, acc: 2, 'decision:mgr': 3, 'decision:cust': 4, 'decision:wh': 5 };
-    if (!['new', 'acc', 'decision:mgr', 'decision:cust', 'decision:wh', 'cancel'].includes(p_target)) fail('مرحلة غير معروفة');
+    const list = await stageList(r), name = k => stageLabel(list, k);
+    // الترتيب: جديد 1، حسابات 2، خطوات القرار بالترتيب، وبعدها المغلقة
+    const order = { new: 1, acc: 2, ...Object.fromEntries(list.map((e, i) => ['decision:' + e.k, i + 3])) };
+    if (!(['new', 'acc', 'cancel'].includes(p_target) || (String(p_target).startsWith('decision:') && order[p_target]))) fail('مرحلة غير معروفة');
     const v = await lockInvoice(r, p_id);
     if (!canSee(u, v)) fail('الطلب غير موجود');
     const from = v.stage + (v.sub ? ':' + v.sub : '');
     if (from === p_target) fail('الطلب أصلاً بهاي المرحلة');
     const [tStage, tSub = null] = p_target.split(':');
-    const back = (order[p_target] || 6) < (order[from] || 0);
+    const back = (order[p_target] || 99) < (order[from] || 0);
     const nw = await setStage(r, ctx, p_id, {
       stage: tStage, sub: tSub, returned: (v.returned || 0) + (back ? 1 : 0),
       cancel_reason: tStage === 'cancel' ? trim(p_reason) : '',
       closed_at: tStage === 'cancel' ? new Date() : null,
       sales_no: v.stage === 'done' ? '' : v.sales_no,
     });
-    await addComment(r, ctx, p_id, 'نقل من ' + (names[from] || from) + ' إلى ' + names[p_target] + (trim(p_reason) ? ': ' + trim(p_reason) : ''), true);
-    await addLog(r, u, p_id, 'نقل الطلب إلى ' + names[p_target]);
+    await addComment(r, ctx, p_id, 'نقل من ' + name(from) + ' إلى ' + name(p_target) + (trim(p_reason) ? ': ' + trim(p_reason) : ''), true);
+    await addLog(r, u, p_id, 'نقل الطلب إلى ' + name(p_target));
     return nw;
   },
 

@@ -1,4 +1,4 @@
-import { S, getInv, userName, boardName, isReq } from './state.js';
+import { S, getInv, userName, boardName, isReq, stepInfo, nextStep, placeName, boardCols } from './state.js';
 import { sb, rpc, refreshInvoice, loadInvoices } from './api.js';
 import { can } from './can.js';
 import { ask, toast, num, esc } from './util.js';
@@ -7,7 +7,7 @@ import { openDrawer, closeDrawer, reloadActivity } from './drawer.js';
 export function waitingOn(inv) {
   if (inv.stage === 'new') return 'المندوب (' + userName(inv.rep_id) + ') يكمل البيانات ويرسل للحسابات';
   if (inv.stage === 'acc') return 'المحاسب يضيف السداد والتوصيل والكلفة';
-  if (inv.stage === 'decision') return { mgr: 'المدير يوافق أو يرجع للحسابات', cust: 'المندوب يبلغ الزبون ويأشر الرد', wh: 'المخزن يحول لمبيعات ويدخل الرقم' }[inv.sub];
+  if (inv.stage === 'decision') return stepInfo(inv.sub).wait;
   return '';
 }
 
@@ -15,7 +15,7 @@ const filled = v => String(v ?? '').trim() !== '';
 
 export function missingBasic(inv) {
   const m = [];
-  // الأدمن يكدر يخلي بعضها اختياري من صفحة المستخدمين ← إلزامية الحقول
+  // الأدمن يكدر يخلي بعضها اختياري من الإعدادات ← الحقول الإلزامية
   if (isReq('customer') && !inv.customer_id) m.push('الزبون (من القائمة)');
   if (filled(inv.quote_no) && filled(inv.res_no)) m.push('رقم عرض السعر أو رقم الحجز (واحد منهم فقط)');
   else if (isReq('ref') && !filled(inv.quote_no) && !filled(inv.res_no)) m.push('رقم عرض السعر أو رقم الحجز (واحد منهم فقط)');
@@ -71,8 +71,10 @@ async function deleteInvoice(inv) {
   closeDrawer(); await loadInvoices(); toast(r.data === null ? 'انتقل الطلب #' + inv.id + ' لسلة المحذوفات' : 'انحذف الطلب #' + inv.id);
 }
 
-// أهداف "نقل الطلب" (الأدمن والمدير) — "تمت" مو منها: تحتاج رقم مبيعات من المخزن
-const MOVE_TO = { new: 'طلب جديد', acc: 'الحسابات', 'decision:mgr': 'بانتظار موافقة المدير', 'decision:cust': 'بانتظار رد الزبون', 'decision:wh': 'بانتظار تحويل المخزن', cancel: 'ملغاة' };
+// أهداف "نقل الطلب" (الأدمن والمدير) — "تمت" مو منها: تكتمل من آخر خطوة
+const moveTargets = () => Object.fromEntries(boardCols().filter(c => c.k !== 'done').map(c => [c.k, c.t]));
+// رسالة بعد ما الطلب يتحرك من خطوة: وين راح
+const afterStep = from => { const n = nextStep(from); return n ? 'انتقل الطلب إلى: ' + stepInfo(n).t : 'اكتمل الطلب ✓' };
 
 export const ACTIONS = {
   sendToAcc(inv) {
@@ -83,25 +85,29 @@ export const ACTIONS = {
   sendToDecision(inv) {
     const m = missingTerms(inv);
     if (m.length) { S.lastMissing = { id: inv.id, list: m }; openDrawer(inv.id); return toast('أكمل الشروط الناقصة') }
-    step('inv_send_to_decision', { p_id: inv.id }, 'بانتظار موافقة المدير', inv.id);
+    step('inv_send_to_decision', { p_id: inv.id }, afterStep(null), inv.id);
   },
-  approve: inv => step('inv_approve', { p_id: inv.id }, 'تمت الموافقة، بانتظار رد الزبون', inv.id),
+  approve: inv => step('inv_approve', { p_id: inv.id }, 'تمت الموافقة. ' + afterStep('mgr'), inv.id),
   returnToAcc: inv => ask('إرجاع الطلب للحسابات', [{ id: 'r', label: 'سبب الإرجاع (اختياري)', type: 'textarea' }],
     v => step('inv_return_to_acc', { p_id: inv.id, p_reason: v.r || null }, 'رجع الطلب للمحاسب', inv.id)),
   returnToRep: inv => ask('إرجاع الطلب للمندوب', [{ id: 'r', label: 'التعديلات المطلوبة (اختياري)', type: 'textarea', help: 'المندوب يشوفها كتعليق على الطلب ويوصله إشعار' }],
     v => step('inv_return_to_rep', { p_id: inv.id, p_reason: v.r || null }, 'رجع الطلب للمندوب', inv.id)),
   move: inv => {
     const cur = inv.stage + (inv.sub ? ':' + inv.sub : '');
-    const opts = Object.entries(MOVE_TO).filter(([k]) => k !== cur).map(([k, t]) => `<option value="${k}">${t}</option>`).join('');
+    const opts = Object.entries(moveTargets()).filter(([k]) => k !== cur).map(([k, t]) => `<option value="${esc(k)}">${esc(t)}</option>`).join('');
     ask('نقل الطلب #' + inv.id, [{ id: 't', label: 'إلى المرحلة', type: 'select', opts, req: true },
       { id: 'r', label: 'السبب (اختياري)', type: 'textarea', help: 'ينكتب كتعليق على الطلب' }],
-      v => step('inv_move', { p_id: inv.id, p_target: v.t, p_reason: v.r || null }, 'انتقل الطلب إلى: ' + MOVE_TO[v.t], inv.id), { okText: 'نقل' });
+      v => step('inv_move', { p_id: inv.id, p_target: v.t, p_reason: v.r || null }, 'انتقل الطلب إلى: ' + placeName(v.t), inv.id), { okText: 'نقل' });
   },
-  custAccept: inv => step('inv_customer_accept', { p_id: inv.id }, 'الزبون موافق، بانتظار المخزن', inv.id),
+  custAccept: inv => step('inv_customer_accept', { p_id: inv.id }, 'الزبون موافق. ' + afterStep('cust'), inv.id),
   custRefuse: inv => ask('الزبون رفض', [{ id: 'r', label: 'سبب الرفض', type: 'textarea', req: true }],
     v => step('inv_customer_refuse', { p_id: inv.id, p_reason: v.r }, 'انتقل الطلب للملغاة', inv.id)),
   complete: inv => ask('تحويل إلى مبيعات', [{ id: 's', label: 'رقم فاتورة المبيعات بالنظام', type: 'text', req: true }],
-    v => step('inv_complete', { p_id: inv.id, p_sales_no: v.s }, 'اكتمل الطلب', inv.id)),
+    v => step('inv_complete', { p_id: inv.id, p_sales_no: v.s }, afterStep('wh'), inv.id)),
+  // الخطوات الإضافية (مثل التدقيق)
+  stepPass: inv => step('inv_step_pass', { p_id: inv.id }, 'خلصت مرحلة ' + stepInfo(inv.sub).t + '. ' + afterStep(inv.sub), inv.id),
+  stepBack: inv => ask('إرجاع الطلب للحسابات', [{ id: 'r', label: 'السبب (اختياري)', type: 'textarea', help: 'المحاسب يشوفه كتعليق على الطلب' }],
+    v => step('inv_step_back', { p_id: inv.id, p_reason: v.r || null }, 'رجع الطلب للمحاسب', inv.id)),
   requestDelete: inv => ask('طلب حذف الطلب #' + inv.id, [{ id: 'r', label: 'سبب الحذف', type: 'textarea', req: true, help: 'الطلب يوصل للأدمن وهو يقرر' }],
     v => step('inv_request_delete', { p_id: inv.id, p_reason: v.r }, 'انرسل طلب الحذف للأدمن', inv.id)),
   cancelDeleteReq: inv => step('inv_cancel_delete_request', { p_id: inv.id },
@@ -120,8 +126,8 @@ export const ACTIONS = {
 
 // نقل مباشر بدون سؤال (السحب والإفلات للأدمن والمدير)
 export function moveTo(inv, target) {
-  if (!can('move', inv) || !MOVE_TO[target]) return;
-  return step('inv_move', { p_id: inv.id, p_target: target, p_reason: null }, 'انتقل الطلب #' + inv.id + ' إلى: ' + MOVE_TO[target], inv.id);
+  if (!can('move', inv) || !moveTargets()[target]) return;
+  return step('inv_move', { p_id: inv.id, p_target: target, p_reason: null }, 'انتقل الطلب #' + inv.id + ' إلى: ' + placeName(target), inv.id);
 }
 
 export function run(a, id) {

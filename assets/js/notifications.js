@@ -1,6 +1,6 @@
 // لوحة الإشعارات (الجرس): تغيّر مرحلة طلبك، أو أحد ذكرك بـ @ بتعليق أو بالملاحظات.
 // الإشعارات تنكتب بالقاعدة (تريغرات 007) وتوصل مباشرة عبر Realtime.
-import { S, COLS, SUB, userName, NOTIF_LEVELS } from './state.js';
+import { S, COLS, subName, stepInfo, userName, NOTIF_LEVELS } from './state.js';
 import { sb, findInvoice } from './api.js';
 import { $, esc, ic, toast } from './util.js';
 import { VAPID_PUBLIC_KEY } from './config.js';
@@ -23,15 +23,15 @@ function text(n) {
   if (n.kind === 'comment') return `${who} علّق على طلبك ${inv}`;
   if (n.kind === 'late') return `الطلب ${inv} صار له ${d.days} يوم بنفس المرحلة وينتظرك`;
   if (back(d)) return d.stage === 'new' ? `${who} رجّع الطلب ${inv} إلك للتعديل` : `${who} رجّع الطلب ${inv} للحسابات`;
-  if (n.kind === 'turn') return `${who} حوّل لك الطلب ${inv} — ${TURN[d.stage === 'decision' ? d.sub : d.stage] || ''}`;
+  if (n.kind === 'turn') return `${who} حوّل لك الطلب ${inv} — ${(d.stage === 'decision' ? stepInfo(d.sub).turn : TURN[d.stage]) || ''}`;
   if (d.stage === 'done') return `${who} حوّل الطلب ${inv} لمبيعات ✓`;
   if (d.stage === 'cancel') return `${who} ألغى الطلب ${inv}${d.reason ? ': ' + d.reason : ''}`;
-  const to = d.stage === 'decision' ? SUB[d.sub] : (COLS.find(c => c.k === d.stage) || {}).t || d.stage;
+  const to = d.stage === 'decision' ? subName(d.sub) : (COLS.find(c => c.k === d.stage) || {}).t || d.stage;
   return `${who} نقل الطلب ${inv} إلى: ${to}`;
 }
 
 // "دورك": شنو المطلوب منك
-const TURN = { new: 'كمّله وأرسله للحسابات', acc: 'يحتاج السداد والكلفة', mgr: 'ينتظر موافقتك', cust: 'بلّغ الزبون وأشّر رده', wh: 'جاهز للتحويل لمبيعات' };
+const TURN = { new: 'كمّله وأرسله للحسابات', acc: 'يحتاج السداد والكلفة' };   // خطوات القرار: stepInfo(k).turn
 
 function ago(ts) {
   const s = (Date.now() - new Date(ts).getTime()) / 1000;

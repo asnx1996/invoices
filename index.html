@@ -46,6 +46,13 @@
   <symbol id="ic-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></symbol>
   <symbol id="ic-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></symbol>
   <symbol id="ic-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z"/></symbol>
+  <symbol id="ic-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M16 4a4 4 0 0 1 0 8M22 21a7 7 0 0 0-4-6.3"/></symbol>
+  <symbol id="ic-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.4 8.3 8 9 4.6-.7 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="ic-flow" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="6" rx="1.5"/><rect x="14" y="15" width="7" height="6" rx="1.5"/><path d="M6.5 9v3a3 3 0 0 0 3 3h4.5"/></symbol>
+  <symbol id="ic-sliders" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+  <symbol id="ic-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><path d="m3 6 1 1 2-2M3 12l1 1 2-2M3 18l1 1 2-2"/></symbol>
+  <symbol id="ic-up" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></symbol>
+  <symbol id="ic-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></symbol>
   <symbol id="ic-at" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/></symbol>
 </svg>
 
@@ -75,9 +82,8 @@
       <button class="tab hidden" data-view="home" id="tabHome">البوردات</button>
       <button class="tab" data-view="board" aria-current="page">اللوحة</button>
       <button class="tab hidden" data-view="super" id="tabSuper">المشرف</button>
-      <button class="tab hidden" data-view="reports" id="tabReports">التقارير</button>
       <button class="tab hidden" data-view="customers" id="tabCustomers">الزبائن</button>
-      <button class="tab hidden" data-view="users" id="tabUsers">المستخدمين</button>
+      <button class="tab hidden" data-view="settings" id="tabSettings">الإعدادات</button>
       <button class="tab hidden" data-view="trash" id="tabTrash">المحذوفات</button>
     </nav>
     <div class="spacer"></div>
@@ -133,19 +139,6 @@
   </div>
 </main>
 
-<main tabindex="-1" id="viewReports" class="hidden">
-  <div class="page wide">
-    <div class="page-head">
-      <h3>التقارير</h3>
-      <label class="help" for="repFrom">من</label><input type="date" id="repFrom">
-      <label class="help" for="repTo">إلى</label><input type="date" id="repTo">
-      <button class="btn primary" id="repGo">عرض</button>
-    </div>
-    <p class="help" style="margin-top:0">الطلبات المنشأة ضمن الفترة. الربح يعتمد على سعر الكلفة اللي يكتبه المحاسب.</p>
-    <div id="repOut"></div>
-  </div>
-</main>
-
 <main tabindex="-1" id="viewCustomers" class="hidden">
   <div class="page wide">
     <div class="panel">
@@ -175,54 +168,15 @@
   </div>
 </main>
 
-<main tabindex="-1" id="viewUsers" class="hidden">
-  <div class="page wide">
-    <div class="panel">
-      <div class="page-head">
-        <h3>المستخدمين</h3>
-        <button class="btn" id="backupBtn"><svg class="i"><use href="#ic-download"/></svg>نسخة احتياطية الآن</button>
-        <button class="btn primary" id="addUserBtn"><svg class="i"><use href="#ic-plus"/></svg>مستخدم جديد</button>
-      </div>
-      <p class="note">تسوي الحساب هنا وتنطي الموظف اسم المستخدم والرمز. تكدر تنطي الشخص أكثر من دور (مثلاً مندوب + محاسب). الموظف يغير رمزه من زر المفتاح فوق.</p>
-      <div class="tbl-wrap"><table id="usersTbl"></table></div>
-    </div>
-    <div class="panel hidden" id="boardsPanel">
-      <div class="page-head">
-        <h3>البوردات</h3>
-        <button class="btn primary" id="addBoardBtn"><svg class="i"><use href="#ic-plus"/></svg>بورد جديد</button>
-      </div>
-      <p class="note">كل بورد معزول بطلباته. تحدد كل مستخدم يا بوردات يشوف من عمود "البوردات" بجدول المستخدمين. الأدمن يشوف كل البوردات.</p>
-      <div class="tbl-wrap"><table id="boardsTbl"></table></div>
-    </div>
-    <div class="panel hidden" id="permPanel">
-      <div class="page-head">
-        <h3>الأدوار والصلاحيات</h3>
-        <button class="btn primary" id="addRoleBtn"><svg class="i"><use href="#ic-plus"/></svg>دور جديد</button>
-      </div>
-      <p class="note">أشّر شنو يكدر يسوي كل دور، والتبويبات اللي تطلعله. المستخدم ياخذ صلاحيات كل أدواره مجموعة. الأدمن عنده كلشي دائماً. التغيير يمشي على المستخدم من يحدّث الصفحة.</p>
-      <div class="tbl-wrap"><table class="perm perm-edit" id="permTbl"></table></div>
-    </div>
-    <div class="panel hidden" id="reqPanel">
-      <h3 style="margin-top:0">الحقول الإلزامية بالطلب</h3>
-      <p class="note">المؤشّر إلزامي: الطلب ما ينرسل للمرحلة الجاية بدونه. شيل العلامة حتى يصير اختياري.</p>
-      <div class="req-grid" id="reqList"></div>
-    </div>
-    <div class="panel" id="settingsPanel">
-      <h3 style="margin-top:0">إعدادات الموقع</h3>
-      <div class="page-head">
-        <label for="setCur">العملة</label>
-        <input type="text" id="setCur" list="curList" maxlength="10" autocomplete="off" style="width:10em">
-        <datalist id="curList"><option value="د.ع"><option value="$"><option value="IQD"><option value="USD"><option value="€"></datalist>
-        <button class="btn primary" id="setCurBtn">حفظ</button>
-      </div>
-      <p class="help" style="margin:0">تطلع جنب كل المبالغ بالموقع لكل المستخدمين.</p>
-      <div class="page-head" style="margin-top:12px">
-        <label for="setRate">سعر صرف الدولار (دينار)</label>
-        <input type="text" id="setRate" inputmode="decimal" autocomplete="off" dir="ltr" style="width:8em">
-        <button class="btn primary" id="setRateBtn">حفظ</button>
-      </div>
-      <p class="help" style="margin:0">إذا المندوب كتب القيمة بالدينار، تنقسم على هذا السعر وتنحفظ بالدولار.</p>
-    </div>
+<main tabindex="-1" id="viewSettings" class="hidden">
+  <div class="set">
+    <aside class="set-side">
+      <h2 class="set-title">الإعدادات</h2>
+      <p class="help set-sub">المستخدمين، الصلاحيات، ومراحل الطلب</p>
+      <select id="setPick" class="set-pick" aria-label="قسم الإعدادات"></select>
+      <nav class="set-nav" id="setNav" aria-label="أقسام الإعدادات"></nav>
+    </aside>
+    <section class="set-main" id="setMain" aria-live="polite"></section>
   </div>
 </main>
 </div>

@@ -1,4 +1,4 @@
-import { S, COLS, SUB, PAY, PAY_LEGACY, PAYER, PAYER_LEGACY, MONTHS, userName, reps, hasRole, hasPerm, hasTerms, ldAmount, totalAfterTransport, pointsPct } from './state.js';
+import { S, COLS, subName, PAY, PAY_LEGACY, PAYER, PAYER_LEGACY, MONTHS, userName, reps, hasRole, hasPerm, hasTerms, ldAmount, totalAfterTransport, pointsPct } from './state.js';
 import { sb, fetchAll } from './api.js';
 import { $, esc, num, ask, toast, ymd, dOnly, DAY } from './util.js';
 
@@ -43,7 +43,7 @@ async function exportXlsx(v) {
     all.forEach(c => costs[c.invoice_id] = c.cost);
   }
 
-  const stName = i => COLS.find(c => c.k === i.stage).t + (i.stage === 'decision' ? ' - ' + SUB[i.sub] : '');
+  const stName = i => COLS.find(c => c.k === i.stage).t + (i.stage === 'decision' ? ' - ' + subName(i.sub) : '');
   const data = rows.map(i => {
     const p = profits[i.id];
     const row = {

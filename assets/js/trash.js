@@ -1,11 +1,11 @@
 // سلة المحذوفات (للأدمن): الطلب المحذوف يبقى هنا لحد ما يرجع أو ينحذف نهائياً (016)
-import { S, COLS, SUB, userName, boardName } from './state.js';
+import { S, COLS, subName, userName, boardName } from './state.js';
 import { sb, rpc, loadInvoices } from './api.js';
 import { $, esc, ask, toast, money, dt } from './util.js';
 
 let rows = [];
 
-const stageText = i => ((COLS.find(c => c.k === i.stage) || {}).t || i.stage) + (i.stage === 'decision' && SUB[i.sub] ? ' · ' + SUB[i.sub] : '');
+const stageText = i => ((COLS.find(c => c.k === i.stage) || {}).t || i.stage) + (i.stage === 'decision' && i.sub ? ' · ' + subName(i.sub) : '');
 
 function paint() {
   const multi = (S.BOARDS || []).length > 1;

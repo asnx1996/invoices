@@ -1,5 +1,5 @@
 // قواعد البرنامج: الصلاحيات، مواصفات الجداول، وما كان triggers بـ Postgres.
-// منقولة من supabase/migrations (الشكل النهائي بعد 021) — نفس الرسائل ونفس الشروط.
+// منقولة من supabase/migrations (الشكل النهائي بعد 022) — نفس الرسائل ونفس الشروط.
 import { sql, raw, join } from './db.js';
 
 export class AppError extends Error { constructor(msg, status = 400) { super(msg); this.status = status } }
@@ -8,6 +8,60 @@ export const fail = (msg, status) => { throw new AppError(msg, status) };
 export const ALL_PERMS = ['create', 'acc', 'approve', 'cust_all', 'complete', 'move', 'urgent_all', 'see_all', 'see_late',
   'see_profit', 'reports', 'export', 'customers', 'users', 'trash'];
 const ACTIVE_STAGES = ['new', 'acc', 'decision'];
+const STEP_KEY = /^(mgr|cust|wh|s_[a-z0-9]{1,20})$/;
+const permOk = x => ALL_PERMS.includes(x) || /^s_[a-z0-9]{1,20}$/.test(x);   // s_xxxx = صلاحية خطوة إضافية (022)
+
+// ---------------------------------------------------------------- مراحل القرار (022)
+// app_settings.stages: [{k, n, on, back}] بالترتيب. بدونه: المدير ← الزبون ← المخزن
+const DEFAULT_STEPS = [{ k: 'mgr', on: true }, { k: 'cust', on: true }, { k: 'wh', on: true }];
+const STEP_NAMES = { mgr: 'موافقة المدير', cust: 'رد الزبون', wh: 'المخزن' };
+export async function stageList(r) {
+  const row = await r.one(sql`select value from app_settings where [key] = 'stages'`);
+  try { const j = row && JSON.parse(row.value); if (Array.isArray(j)) return j } catch (e) { }
+  return DEFAULT_STEPS;
+}
+// الخطوة المفعّلة اللي بعد cur (null = أول خطوة). null = ماكو ← الطلب يكتمل
+export function stageNext(list, cur) {
+  const at = cur == null ? -1 : list.findIndex(e => e.k === cur);
+  return (list.slice(at + 1).find(e => e.on !== false) || {}).k || null;
+}
+export const stageName = (list, k) => String((list.find(e => e.k === k) || {}).n || '').trim() || STEP_NAMES[k] || k;
+export const stageLabel = (list, key) => ({ new: 'طلب جديد', acc: 'الحسابات', done: 'تمت', cancel: 'ملغاة' })[key] || stageName(list, String(key).split(':')[1]);
+export const stageBackOk = (list, k) => !!(list.find(e => e.k === k) || {}).back;
+
+// app_settings_stages_guard: فحص الإعداد + ما تنحذف خطوة بيها طلبات شغالة. يرجّع النص المرتب
+export async function stagesGuard(r, value, oldValue) {
+  let j;
+  try { j = JSON.parse(value) } catch (e) { fail('إعداد المراحل غير صالح') }
+  if (!Array.isArray(j) || j.length > 20) fail('إعداد المراحل غير صالح');
+  const keys = [];
+  for (const e of j) {
+    if (!e || typeof e !== 'object' || !STEP_KEY.test(e.k || '') || keys.includes(e.k)) fail('مرحلة غير صالحة: ' + ((e && e.k) || '?'));
+    if ('n' in e && (typeof e.n !== 'string' || e.n.length > 30)) fail('اسم المرحلة لازم 30 حرف أو أقل');
+    if (e.k.startsWith('s_') && !String(e.n || '').trim()) fail('المرحلة الجديدة تحتاج اسم');
+    if (('on' in e && typeof e.on !== 'boolean') || ('back' in e && typeof e.back !== 'boolean')) fail('إعداد المراحل غير صالح');
+    keys.push(e.k);
+  }
+  if (!['mgr', 'cust', 'wh'].every(k => keys.includes(k))) fail('المراحل الأساسية تنطفي بس ما تنحذف');
+  let old = [];
+  try { old = oldValue ? JSON.parse(oldValue) : [] } catch (e) { }
+  for (const x of Array.isArray(old) ? old : []) {
+    if (keys.includes(x.k)) continue;
+    const c = await r.one(sql`select count(*) n from invoices where stage = 'decision' and sub = ${x.k} and deleted_at is null`);
+    if (c.n > 0) fail(`ما تكدر تحذف مرحلة "${stageName(old, x.k)}" — بيها ${c.n} طلب. انقلها لمرحلة ثانية أو طفّي المرحلة بدل الحذف`);
+  }
+  return JSON.stringify(j);
+}
+
+// app_settings_stages_cleanup: صلاحيات الخطوات المحذوفة تنشال من الأدوار
+export async function stagesCleanup(r, value) {
+  const keys = JSON.parse(value).map(e => e.k);
+  for (const d of await r.query(sql`select [key], perms from role_defs`)) {
+    const p = JSON.parse(d.perms), keep = p.filter(x => !x.startsWith('s_') || keys.includes(x));
+    if (keep.length !== p.length) await r.exec(sql`update role_defs set perms = ${JSON.stringify(keep)} where [key] = ${d.key}`);
+  }
+  dropDefsCache();
+}
 
 // ---------------------------------------------------------------- مواصفات الجداول
 // cols: الأعمدة اللي تطلع للواجهة. dt: أوقات، date: تاريخ بدون وقت، json: مصفوفات/كائنات، bool: نعم/لا
@@ -174,7 +228,8 @@ export async function mentionedUsers(r, text) {
 async function turnUsers(r, stage, sub, rep) {
   const out = new Set();
   if (rep && (stage === 'new' || (stage === 'decision' && sub === 'cust'))) out.add(rep);
-  const need = stage === 'acc' ? ['acc'] : stage === 'decision' && sub === 'mgr' ? ['approve'] : stage === 'decision' && sub === 'wh' ? ['complete'] : null;
+  const need = stage === 'acc' ? ['acc'] : stage === 'decision' && sub === 'mgr' ? ['approve'] : stage === 'decision' && sub === 'wh' ? ['complete']
+    : stage === 'decision' && /^s_/.test(sub || '') ? [sub] : null;
   if (need) {
     const people = await r.query(sql`select id from profiles where active = 1`);
     for (const p of people) {
@@ -413,7 +468,7 @@ export function validate(table, row) {
     if (row.name != null && (!String(row.name).trim() || String(row.name).length > 40)) fail('اسم الدور مطلوب (40 حرف كحد أقصى)');
     if (row.perms != null) {
       const p = typeof row.perms === 'string' ? JSON.parse(row.perms) : row.perms;
-      if (!Array.isArray(p) || p.some(x => !ALL_PERMS.includes(x))) fail('صلاحية غير معروفة');
+      if (!Array.isArray(p) || p.some(x => !permOk(x))) fail('صلاحية غير معروفة');
     }
   }
   if (table === 'profiles' && row.avatar != null && !/^[a-z0-9-]{1,24}$/.test(row.avatar)) fail('صورة غير معروفة');

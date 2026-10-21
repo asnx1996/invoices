@@ -1,4 +1,4 @@
-import { S, BOARD_COLS, colKey, MONTHS, getInv, userName, reps, isActive, isUrgent, ageLevel, daysIn, hasPerm, getBoard } from './state.js';
+import { S, boardCols, colKey, MONTHS, getInv, userName, reps, isActive, isUrgent, ageLevel, daysIn, hasPerm, getBoard, stepCols, nextStep, passAction } from './state.js';
 import { $, $$, esc, num, money, pct, ic, toast, ask } from './util.js';
 import { avatarHTML } from './avatars.js';
 import { can } from './can.js';
@@ -20,10 +20,10 @@ const narrow = matchMedia('(max-width: 640px)');
 const mOpen = new Set(load('ib_mopen', []));
 const isOpen = id => allOpen !== flipped.has(id);
 
-// وين واكف الطلب
-const STAGE_OPTS = [
+// وين واكف الطلب (خطوات القرار حسب إعداد المراحل)
+const stageOpts = () => [
   ['all', 'كل الحالات'], ['new', 'عند المندوب'], ['acc', 'عند المحاسب'],
-  ['decision:mgr', 'موافقة المدير'], ['decision:cust', 'رد الزبون'], ['decision:wh', 'تحويل المخزن'],
+  ...stepCols().map(c => [c.k, c.t]),
   ['done', 'تمت'], ['cancel', 'ملغاة'], ['urgent', 'الطارئة'],
 ];
 
@@ -95,7 +95,7 @@ const skel = n => '<div class="card skel" aria-hidden="true"><i></i><i></i><i></
 
 function sortSelect(k) {
   const cur = sortBy[k] || 'age';
-  return `<select class="col-sort" data-sort="${k}" aria-label="ترتيب عمود ${BOARD_COLS.find(c => c.k === k).t}">${Object.entries(SORTS)
+  return `<select class="col-sort" data-sort="${k}" aria-label="ترتيب عمود ${esc((boardCols().find(c => c.k === k) || {}).t || '')}">${Object.entries(SORTS)
     .filter(([, s]) => !s[2] || seesProfit())
     .map(([v, s]) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${s[0]}</option>`).join('')}</select>`;
 }
@@ -104,8 +104,8 @@ export function renderBoard() {
   if (!S.ME) return;
   if (!S.loaded) {
     $('#board').setAttribute('aria-busy', 'true');
-    $('#board').innerHTML = BOARD_COLS.map((c, i) => `<section class="column"><div class="col-head"><span class="dot" style="background:${c.c}"></span><h2>${c.t}</h2></div>
-      <div class="col-body">${skel([3, 2, 2, 1, 1, 1, 1][i])}</div></section>`).join('');
+    $('#board').innerHTML = boardCols().map((c, i) => `<section class="column"><div class="col-head"><span class="dot" style="background:${c.c}"></span><h2>${esc(c.t)}</h2></div>
+      <div class="col-body">${skel([3, 2, 2, 1, 1, 1, 1][i] || 1)}</div></section>`).join('');
     $('#stats').innerHTML = '<div class="stat skel" aria-hidden="true"><i></i><i></i></div>'.repeat(3);
     $('#boardTitle').textContent = (getBoard() || {}).name || '';
     return;
@@ -117,7 +117,7 @@ export function renderBoard() {
 
   $('#board').removeAttribute('aria-busy');
   const list = filtered();
-  $('#board').innerHTML = BOARD_COLS.map(c => {
+  $('#board').innerHTML = boardCols().map(c => {
     const cmp = (SORTS[sortBy[c.k]] || SORTS.age)[1];
     // الطارئة دائماً فوق، وبعدها الترتيب اللي اختاره
     const items = list.filter(i => colKey(i) === c.k).sort((x, y) => isUrgent(y) - isUrgent(x) || cmp(x, y));
@@ -126,23 +126,23 @@ export function renderBoard() {
       const open = mOpen.has(c.k);
       return `<section class="column m-col${open ? ' open' : ''}" data-col="${c.k}">
       <button type="button" class="m-head" aria-expanded="${open}" aria-controls="mb-${c.k}">
-        <span class="dot" style="background:${c.c}"></span><h2>${c.t}</h2>${urg ? `<span class="urg-dot" title="${urg} طارئ"></span>` : ''}<span class="count">${items.length}</span>${ic('chev')}</button>
-      <div class="mc-body" id="mb-${c.k}" ${open ? '' : 'hidden'}>${open ? `<div class="col-sub"><span>${c.who}</span>${sortSelect(c.k)}</div>
+        <span class="dot" style="background:${c.c}"></span><h2>${esc(c.t)}</h2>${urg ? `<span class="urg-dot" title="${urg} طارئ"></span>` : ''}<span class="count">${items.length}</span>${ic('chev')}</button>
+      <div class="mc-body" id="mb-${c.k}" ${open ? '' : 'hidden'}>${open ? `<div class="col-sub"><span>${esc(c.who)}</span>${sortSelect(c.k)}</div>
         <div class="col-body">${items.map(cardHTML).join('') || '<div class="empty">لا توجد طلبات</div>'}</div>` : ''}</div></section>`;
     }
     // العمود المطوي: من توكف عليه بالماوس ينفتح مؤقتاً (peek) ويرجع يتطوى من تطلع منه. الضغط يفتحه دائماً
     if (folded.has(c.k)) return `<section class="column folded${peekCol === c.k ? ' peek still' : ''}" data-col="${c.k}">
-      <button type="button" class="col-fold" aria-expanded="false" aria-label="فتح عمود ${c.t}" title="فتح العمود">
-        <span class="dot" style="background:${c.c}"></span><span class="count">${items.length}</span>${urg ? `<span class="urg-dot" title="${urg} طارئ"></span>` : ''}<h2>${c.t}</h2></button>
+      <button type="button" class="col-fold" aria-expanded="false" aria-label="فتح عمود ${esc(c.t)}" title="فتح العمود">
+        <span class="dot" style="background:${c.c}"></span><span class="count">${items.length}</span>${urg ? `<span class="urg-dot" title="${urg} طارئ"></span>` : ''}<h2>${esc(c.t)}</h2></button>
       <div class="peek-body" aria-hidden="${peekCol !== c.k}">
-        <div class="col-head"><span class="dot" style="background:${c.c}"></span><h2>${c.t}</h2><span class="count">${items.length}</span>
-          <button type="button" class="col-fold icon-btn sm pin" aria-expanded="false" aria-label="تثبيت عمود ${c.t} مفتوح" title="خليه مفتوح" tabindex="-1">${ic('expand')}</button></div>
-        <div class="col-sub"><span>${c.who}</span>${sortSelect(c.k)}</div>
+        <div class="col-head"><span class="dot" style="background:${c.c}"></span><h2>${esc(c.t)}</h2><span class="count">${items.length}</span>
+          <button type="button" class="col-fold icon-btn sm pin" aria-expanded="false" aria-label="تثبيت عمود ${esc(c.t)} مفتوح" title="خليه مفتوح" tabindex="-1">${ic('expand')}</button></div>
+        <div class="col-sub"><span>${esc(c.who)}</span>${sortSelect(c.k)}</div>
         <div class="col-body">${items.map(cardHTML).join('') || '<div class="empty">لا توجد طلبات</div>'}</div></div></section>`;
-    return `<section class="column" data-col="${c.k}">
-      <div class="col-head"><span class="dot" style="background:${c.c}"></span><h2>${c.t}</h2><span class="count">${items.length}</span>
-        <button type="button" class="col-fold icon-btn sm" aria-expanded="true" aria-label="طي عمود ${c.t}" title="طي العمود">${ic('chev')}</button></div>
-      <div class="col-sub"><span>${c.who}</span>${sortSelect(c.k)}</div>
+    return `<section class="column${c.off ? ' off' : ''}" data-col="${c.k}">
+      <div class="col-head"><span class="dot" style="background:${c.c}"></span><h2>${esc(c.t)}</h2><span class="count">${items.length}</span>
+        <button type="button" class="col-fold icon-btn sm" aria-expanded="true" aria-label="طي عمود ${esc(c.t)}" title="طي العمود">${ic('chev')}</button></div>
+      <div class="col-sub"><span>${esc(c.who)}</span>${sortSelect(c.k)}</div>
       <div class="col-body">${items.map(cardHTML).join('') || '<div class="empty">لا توجد طلبات</div>'}</div></section>`;
   }).join('');
   renderStats(list);
@@ -175,7 +175,8 @@ export function fillFilters() {
   $('#fRep').value = [...$('#fRep').options].some(o => o.value === cur) ? cur : 'all';
   $('#fRep').classList.toggle('hidden', !(hasPerm('see_all') || hasPerm('see_late')));
   const st = $('#fStage').value || 'all';
-  const opts = can('trash') ? [...STAGE_OPTS, ['del', 'طلبات الحذف']] : STAGE_OPTS;
+  const opts = can('trash') ? [...stageOpts(), ['del', 'طلبات الحذف']] : stageOpts();
+  opts.forEach(o => o[1] = esc(o[1]));
   $('#fStage').innerHTML = opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
   $('#fStage').value = opts.some(o => o[0] === st) ? st : 'all';
   syncExpandBtn();
@@ -259,16 +260,22 @@ function toggleCard(card) {
   x.inert = !open;
 }
 
+// الخطوة الطبيعية بين عمودين حسب ترتيب المراحل
+function naturalStep(f, to) {
+  const fix = { 'new>acc': 'sendToAcc', 'acc>new': 'returnToRep', 'decision:mgr>acc': 'returnToAcc', 'decision:cust>cancel': 'custRefuse' }[f + '>' + to];
+  if (fix) return fix;
+  const sub = f.startsWith('decision:') ? f.slice(9) : null;
+  if (sub && to === 'acc') return /^s_/.test(sub) ? 'stepBack' : null;
+  const nx = f === 'acc' ? nextStep(null) : sub ? nextStep(sub) : undefined;
+  if (nx === undefined || to !== (nx ? 'decision:' + nx : 'done')) return null;
+  return f === 'acc' ? 'sendToDecision' : passAction(sub);
+}
+
 function handleDrop(id, to) {
   const inv = getInv(id), f = inv && colKey(inv); if (!inv || f === to) return;
-  // الخطوة الطبيعية بين كل عمودين
-  const a = {
-    'new>acc': 'sendToAcc', 'acc>new': 'returnToRep', 'acc>decision:mgr': 'sendToDecision',
-    'decision:mgr>acc': 'returnToAcc', 'decision:mgr>decision:cust': 'approve',
-    'decision:cust>decision:wh': 'custAccept', 'decision:cust>cancel': 'custRefuse', 'decision:wh>done': 'complete',
-  }[f + '>' + to] || null;
-  const order = { new: 1, acc: 2, 'decision:mgr': 3, 'decision:cust': 4, 'decision:wh': 5, done: 6, cancel: 6 };
-  const back = order[to] < order[f] || f === 'cancel' || f === 'done';
+  const a = naturalStep(f, to);
+  const cols = boardCols().map(c => c.k), order = k => ['done', 'cancel'].includes(k) ? 99 : cols.indexOf(k);
+  const back = order(to) < order(f) || f === 'cancel' || f === 'done';
   // الخطوة العادية (إذا مسموحة)، إلا الرجوع للخلف: الأدمن والمدير ينقلون مباشرة بدون سبب
   if (a && can(a, inv) && !(back && can('move', inv))) return run(a, id);
   if (can('move', inv) && to !== 'done') return moveTo(inv, to);

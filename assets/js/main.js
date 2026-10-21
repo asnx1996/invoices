@@ -5,9 +5,8 @@ import { $, $$, toast, esc } from './util.js';
 import { initAuth } from './auth.js';
 import { initBoard, renderBoard, fillFilters } from './board.js';
 import { initDrawer, openDrawer, hideDrawer, openDraft } from './drawer.js';
-import { initUsers, renderUsers, addBoard } from './users.js';
+import { initSettings, renderSettings, refreshSettingsNav, addBoard } from './settings.js';
 import { initCustomers, renderCustomers } from './customers.js';
-import { initReports, renderReports } from './reports.js';
 import { initExport } from './export.js';
 import { initNotifs } from './notifications.js';
 import { initMentions } from './mentions.js';
@@ -17,15 +16,16 @@ import { initHome, renderHome, refreshHome } from './home.js';
 import { initTrash, renderTrash } from './trash.js';
 import { initSuper, renderSuper, paintSuper } from './supervisor.js';
 
-const VIEWS = { home: '#viewHome', board: '#viewBoard', customers: '#viewCustomers', reports: '#viewReports', users: '#viewUsers', trash: '#viewTrash', super: '#viewSuper' };
+const VIEWS = { home: '#viewHome', board: '#viewBoard', customers: '#viewCustomers', settings: '#viewSettings', trash: '#viewTrash', super: '#viewSuper' };
 let view = 'board';
 let pendingInv = null; // رابط طلب (#inv-12) ينفتح بعد ما تتحمل البيانات
 let startHome = false; // فتح التطبيق بدون رابط: صفحة البوردات أول (إذا عنده أكثر من بورد)
 
-// كل قسم إله رابط (#reports) حتى زر الرجوع بالموبايل والمتصفح يشتغل صح
+// كل قسم إله رابط (#settings) حتى زر الرجوع بالموبايل والمتصفح يشتغل صح
 const urlFor = v => v === 'board' ? location.pathname + location.search : '#' + v;
 
 function show(v, push = true) {
+  if (v === 'users') v = 'settings';   // الرابط القديم
   if (!VIEWS[v] || (v !== 'board' && !can(v))) v = 'board';
   if (push && v !== view) history.pushState({ v }, '', urlFor(v));
   view = v;
@@ -33,9 +33,8 @@ function show(v, push = true) {
   $('#skipLink').setAttribute('href', VIEWS[v]);
   Object.entries(VIEWS).forEach(([k, sel]) => $(sel).classList.toggle('hidden', k !== v));
   $('#toolbar').classList.toggle('hidden', v !== 'board');
-  if (v === 'users') renderUsers();
+  if (v === 'settings') renderSettings();
   if (v === 'customers') renderCustomers();
-  if (v === 'reports') renderReports();
   if (v === 'trash') renderTrash();
   if (v === 'super') renderSuper();
   if (v === 'home') { renderHome(); refreshHome() }
@@ -44,9 +43,8 @@ function show(v, push = true) {
 
 // بعد تسجيل الدخول: نظهر/نخفي حسب الصلاحيات
 function onReady() {
-  $('#tabUsers').classList.toggle('hidden', !can('users'));
+  $('#tabSettings').classList.toggle('hidden', !can('settings'));
   $('#tabCustomers').classList.toggle('hidden', !can('customers'));
-  $('#tabReports').classList.toggle('hidden', !can('reports'));
   $('#tabTrash').classList.toggle('hidden', !can('trash'));
   $('#tabSuper').classList.toggle('hidden', !can('super'));
   $('#newBtn').classList.toggle('hidden', !can('create'));
@@ -80,6 +78,7 @@ onChange(() => {
   }
   if (view === 'home') renderHome();
   if (view === 'super') paintSuper();
+  if (view === 'settings') refreshSettingsNav();
   if (pendingInv && S.loaded) {
     const id = pendingInv; pendingInv = null;
     findInvoice(id).then(ok => ok ? openDrawer(id) : toast('الطلب #' + id + ' مو موجود أو ما عندك صلاحية تشوفه'));
@@ -96,10 +95,7 @@ function fillBoards() {
   $('#tabHome').classList.toggle('hidden', !can('home'));
   $('#noBoard').classList.toggle('hidden', !(S.BOARDS && !S.BOARDS.length));
 }
-$('#boardSel').addEventListener('change', async e => {
-  await setBoard(+e.target.value);
-  if (view === 'reports') renderReports();
-});
+$('#boardSel').addEventListener('change', e => setBoard(+e.target.value));
 
 $$('.tab').forEach(t => t.onclick = () => show(t.dataset.view));
 initHome(async id => { show('board'); await setBoard(id) }, addBoard);
@@ -112,7 +108,7 @@ $('#newBtn').onclick = () => {
   setTimeout(() => { const f = $('#f_customer_pick'); f && f.focus() }, 150);
 };
 
-initBoard(); initAppearance(); initDrawer(); initUsers(); initCustomers(); initReports(); initExport(); initNotifs(); initMentions(); initTrash();
+initBoard(); initAppearance(); initDrawer(); initSettings(); initCustomers(); initExport(); initNotifs(); initMentions(); initTrash();
 initSuper(async id => { show('board'); if (await findInvoice(id)) openDrawer(id); else toast('الطلب #' + id + ' مو موجود') });
 $('#meBtn').onclick = () => openAvatarPicker();
 initAuth(onReady);

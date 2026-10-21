@@ -1,4 +1,4 @@
-import { S, COLS, SUB, PAY, PAY_LEGACY, PAYER, PAYER_LEGACY, MONTHS, POINT_RATE, hasRole, isReq, getInv, userName, reps, isActive, isUrgent,
+import { S, COLS, subName, stepInfo, PAY, PAY_LEGACY, PAYER, PAYER_LEGACY, MONTHS, POINT_RATE, hasRole, isReq, getInv, userName, reps, isActive, isUrgent,
   ldAmount, transportAdded, totalAfterTransport, pointsPct, discPct, onChange, NOTIF_LEVELS } from './state.js';
 import { renderBoard } from './board.js';
 import { $, esc, num, fmt, money, pct, dt, dOnly, ic, toast, ask, cur, rate, numAttrs, numVal } from './util.js';
@@ -161,11 +161,13 @@ function valueFld(inv, eb) {
 const tog = (label, col, val, dis) => `<label class="toggle${pendingHas(col) ? ' chg' : ''}" for="f_${col}"><input type="checkbox" id="f_${col}" data-f="${col}" data-rer="1" ${val ? 'checked' : ''} ${dis ? 'disabled' : ''}>${label}${pendingHas(col) ? `<span class="was">قبل: <b>${esc(wasText(col))}</b></span>` : ''}</label>`;
 const filled = v => String(v ?? '').trim() !== '';
 
+// شريط المراحل: المفعّلة حسب إعداد الأدمن (+ خطوة الطلب الحالية لو مطفية)
 function stepsHTML(inv) {
-  const seq = [['new', 'طلب'], ['acc', 'حسابات'], ['mgr', 'المدير'], ['cust', 'الزبون'], ['wh', 'المخزن'], ['done', 'تمت']];
-  if (inv.stage === 'cancel') return `<div class="steps">${seq.map(s => `<div class="step cancel"><div class="ln"></div>${s[1]}</div>`).join('')}</div>`;
-  const pos = inv.stage === 'new' ? 0 : inv.stage === 'acc' ? 1 : inv.stage === 'done' ? 5 : { mgr: 2, cust: 3, wh: 4 }[inv.sub];
-  return `<div class="steps">${seq.map((s, i) => `<div class="step ${i < pos || inv.stage === 'done' ? 'done' : i === pos ? 'cur' : ''}"><div class="ln"></div>${s[1]}</div>`).join('')}</div>`;
+  const mid = S.STEPS.filter(e => e.on !== false || (inv.stage === 'decision' && inv.sub === e.k)).map(e => [e.k, stepInfo(e.k).t]);
+  const seq = [['new', 'طلب'], ['acc', 'حسابات'], ...mid, ['done', 'تمت']];
+  if (inv.stage === 'cancel') return `<div class="steps">${seq.map(s => `<div class="step cancel"><div class="ln"></div>${esc(s[1])}</div>`).join('')}</div>`;
+  const pos = inv.stage === 'decision' ? seq.findIndex(s => s[0] === inv.sub) : seq.findIndex(s => s[0] === inv.stage);
+  return `<div class="steps">${seq.map((s, i) => `<div class="step ${i < pos || inv.stage === 'done' ? 'done' : i === pos ? 'cur' : ''}"><div class="ln"></div>${esc(s[1])}</div>`).join('')}</div>`;
 }
 
 function deleteReqHTML(inv) {
@@ -184,10 +186,11 @@ function actionsHTML(inv) {
     btn('returnToRep', 'إرجاع للمندوب', 'bad', 'back'),
     btn('approve', 'موافقة على الشروط', 'ok', 'check'), btn('returnToAcc', 'إرجاع للحسابات', 'bad', 'back'),
     btn('custAccept', 'الزبون موافق', 'ok', 'check'), btn('custRefuse', 'الزبون رفض', 'bad', 'x'),
-    btn('complete', 'تحويل لمبيعات + رقم المبيعات', 'ok', 'check')].join('');
+    btn('complete', 'تحويل لمبيعات + رقم المبيعات', 'ok', 'check'),
+    inv.stage === 'decision' ? btn('stepPass', 'تم: ' + esc(stepInfo(inv.sub).t), 'ok', 'check') : '', btn('stepBack', 'إرجاع للحسابات', 'bad', 'back')].join('');
   const small = [btn('move', 'نقل لمرحلة ثانية', 'sm', 'board'), btn('setBoard', 'نقل لبورد ثاني', 'sm', 'board'), can('toggleUrgent', inv) ? `<button class="btn sm ${inv.urgent ? '' : 'bad'}" data-act="toggleUrgent" aria-pressed="${!!inv.urgent}">${ic('flame')}${inv.urgent ? 'شيل علامة طارئ' : 'طارئ'}</button>` : '', btn('requestDelete', 'طلب حذف', 'bad sm', 'trash'), inv.delete_req_at ? '' : btn('delete', 'حذف', 'bad sm', 'trash')].join('');
   let wait;
-  if (inv.stage === 'done') wait = `تمت برقم مبيعات <b>${esc(inv.sales_no)}</b> — ${dOnly(inv.closed_at)}`;
+  if (inv.stage === 'done') wait = inv.sales_no ? `تمت برقم مبيعات <b>${esc(inv.sales_no)}</b> — ${dOnly(inv.closed_at)}` : `تمت — ${dOnly(inv.closed_at)}`;
   else if (inv.stage === 'cancel') wait = `ملغاة: ${esc(inv.cancel_reason)}`;
   else wait = 'الخطوة الحالية: ' + esc(waitingOn(inv));
   const miss = S.lastMissing && S.lastMissing.id === inv.id ? `<div class="missing">حقول ناقصة:<ul>${S.lastMissing.list.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
@@ -438,7 +441,7 @@ export function renderDrawer() {
     <div style="flex:1;min-width:0">
       <div class="sub">${draft ? 'غير محفوظ' : '#' + inv.id} · ${esc(userName(inv.rep_id))} · ${dOnly(inv.created_at)}</div>
       <h3>${esc(inv.customer) || 'طلب جديد'}</h3>
-      <span class="badge" style="background:var(--surface-2);color:${col.c};border:1px solid var(--border)">${col.t}${inv.stage === 'decision' ? ' · ' + SUB[inv.sub] : ''}</span>
+      <span class="badge" style="background:var(--surface-2);color:${inv.stage === 'decision' ? stepInfo(inv.sub).c : col.c};border:1px solid var(--border)">${col.t}${inv.stage === 'decision' ? ' · ' + esc(subName(inv.sub)) : ''}</span>
       ${isUrgent(inv) ? `<span class="badge b-urgent">${ic('flame')}طارئ</span>` : ''}
       ${draft || S.ME.notif_level == null ? '' : `<label class="d-notif" title="شنو يوصلك من إشعارات هذا الطلب">${ic('bell')}<select id="invNotif" aria-label="إشعارات هذا الطلب">
         <option value="">حسب إعدادي العام (${NOTIF_LEVELS[S.ME.notif_level] || ''})</option>

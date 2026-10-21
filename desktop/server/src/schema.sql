@@ -107,7 +107,7 @@ create table invoices (
   pdf_name nvarchar(400) null,
   pdf_size int null,
   stage varchar(10) null default 'new' check (stage in ('new', 'acc', 'decision', 'done', 'cancel')),
-  sub varchar(10) null check (sub in ('mgr', 'cust', 'wh')),
+  sub varchar(24) null,                              -- خطوة القرار: mgr | cust | wh | s_xxxx (022 — تنفحص بالسيرفر)
   payment varchar(10) null check (payment in ('cash', 'credit', 'cheque', 'transfer')),
   credit_days int null,
   credit_months smallint null check (credit_months between 1 and 3),
@@ -174,7 +174,7 @@ create table invoice_stage_log (
   id int identity(1, 1) not null primary key,
   invoice_id int not null references invoices (id) on delete cascade,
   stage varchar(10) not null,
-  sub varchar(10) null,
+  sub varchar(24) null,
   at datetime2(3) not null default sysutcdatetime()
 );
 create index invoice_stage_log_inv on invoice_stage_log (invoice_id, at);

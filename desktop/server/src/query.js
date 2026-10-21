@@ -3,7 +3,7 @@
 import { sql, raw, join } from './db.js';
 import {
   spec, col, toDb, fromDb, POLICY, fail, validate, updateInvoice, addComment, profileBeforeWrite,
-  dropDefsCache, needActive,
+  dropDefsCache, needActive, stagesGuard, stagesCleanup,
 } from './rules.js';
 
 const OPS = { eq: '=', neq: '<>', gt: '>', gte: '>=', lt: '<', lte: '<=' };
@@ -114,6 +114,7 @@ async function insertRow(r, ctx, table, input) {
   if (table === 'app_settings') row.updated_by = u.uid;
   pol.ins(u, row);
   validate(table, row);
+  if (table === 'app_settings' && row.key === 'stages') row.value = await stagesGuard(r, row.value, null);
   const keys = Object.keys(row);
   const out = await r.one(sql`insert into ${raw(table)} (${join(keys.map(k => col(k)))}) output inserted.*
     values (${join(keys.map(k => sql`${toDb(table, k, row[k])}`))})`);
@@ -123,6 +124,7 @@ async function insertRow(r, ctx, table, input) {
     ctx.events.push({ type: 'invoice', id: res.id });
   }
   if (table === 'role_defs') dropDefsCache();
+  if (table === 'app_settings' && res.key === 'stages') await stagesCleanup(r, res.value);
   return res;
 }
 
@@ -142,12 +144,14 @@ async function updateRows(r, ctx, table, q, patch) {
     if (table === 'profiles') await profileBeforeWrite(r, u, nw, old, true);
     validate(table, patch);
     if (!pol.updUsing(u, nw)) fail('ما عندك صلاحية', 403);
+    if (table === 'app_settings' && old.key === 'stages' && 'value' in patch) nw.value = await stagesGuard(r, nw.value, old.value);
     const keys = table === 'profiles' ? ['full_name', 'role', 'roles', 'xroles', 'active', 'avatar', 'avatar_chosen', 'notif_level'] : Object.keys(patch);
     if (table === 'app_settings') { nw.updated_by = u.uid; nw.updated_at = new Date(); keys.push('updated_by', 'updated_at') }
     await r.exec(sql`update ${raw(table)} set ${join(keys.map(k => sql`${col(k)} = ${toDb(table, k, nw[k])}`))} where ${pkWhere(table, old)}`);
     // profiles_kick_inactive
     if (table === 'profiles' && old.active && !nw.active) { await r.exec(sql`delete from sessions where user_id = ${old.id}`); ctx.events.push({ type: 'kick', user_id: old.id }) }
     if (table === 'role_defs') dropDefsCache();
+    if (table === 'app_settings' && old.key === 'stages') await stagesCleanup(r, nw.value);
     out.push(fromDb(table, await r.one(sql`select * from ${raw(table)} where ${pkWhere(table, old)}`)));
   }
   return out;

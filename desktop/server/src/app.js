@@ -224,6 +224,13 @@ async function upgradeDb() {
   await r.exec(sql`if col_length('customers', 'xtra_guid') is null alter table customers add xtra_guid char(36) null`);
   await r.exec(sql`if not exists (select 1 from sys.indexes where name = 'customers_xtra_uniq')
     exec('create unique index customers_xtra_uniq on customers (xtra_guid) where xtra_guid is not null')`);
+  // 022: خطوات القرار يتحكم بيها الأدمن — sub يقبل الخطوات الإضافية (s_xxxx)
+  await r.exec(sql`declare @c sysname = (select top 1 cc.name from sys.check_constraints cc
+      join sys.columns c on c.object_id = cc.parent_object_id and c.column_id = cc.parent_column_id
+     where cc.parent_object_id = object_id('invoices') and c.name = 'sub');
+    if @c is not null exec('alter table invoices drop constraint [' + @c + ']')`);
+  await r.exec(sql`if col_length('invoices', 'sub') < 24 alter table invoices alter column sub varchar(24) null`);
+  await r.exec(sql`if col_length('invoice_stage_log', 'sub') < 24 alter table invoice_stage_log alter column sub varchar(24) null`);
 }
 
 let started = null;

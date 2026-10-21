@@ -1,7 +1,7 @@
-import { S, hasRole, hasPerm } from './state.js';
+import { S, hasRole, hasPerm, stepInfo } from './state.js';
 
 // نسخة من قواعد القاعدة للواجهة فقط (الحماية الحقيقية بالقاعدة — supabase/migrations/018)
-// الصلاحيات يوزعها الأدمن على الأدوار من صفحة المستخدمين؛ الأدمن عنده كلشي
+// الصلاحيات يوزعها الأدمن على الأدوار من الإعدادات؛ الأدمن عنده كلشي
 export function can(a, inv) {
   const admin = hasRole('admin'), P = hasPerm;
   const own = inv && inv.rep_id === S.ME.id;
@@ -11,8 +11,9 @@ export function can(a, inv) {
     case 'users': return P('users');
     case 'customers': return P('customers');
     case 'trash': return P('trash');
-    case 'reports': return P('reports');
-    case 'backup': case 'settings': case 'super': return admin;
+    // الإعدادات: الأدمن كلها، وصاحب صلاحية المستخدمين يشوف قسم المستخدمين بس
+    case 'settings': return admin || P('users');
+    case 'backup': case 'super': return admin;
     case 'editBasic': return admin || (inv.stage === 'new' && P('create') && own);
     case 'editValue': return admin || (inv.stage === 'new' && P('create') && own) || (inv.stage === 'acc' && P('acc'));
     case 'sendToAcc': return inv.stage === 'new' && (admin || (P('create') && own));
@@ -24,6 +25,9 @@ export function can(a, inv) {
     case 'approve': case 'returnToAcc': return inv.stage === 'decision' && inv.sub === 'mgr' && P('approve');
     case 'custAccept': case 'custRefuse': return inv.stage === 'decision' && inv.sub === 'cust' && (P('cust_all') || (P('create') && own));
     case 'complete': return inv.stage === 'decision' && inv.sub === 'wh' && P('complete');
+    // الخطوات الإضافية (022): صلاحيتها بنفس مفتاحها
+    case 'stepPass': return inv.stage === 'decision' && /^s_/.test(inv.sub || '') && P(inv.sub);
+    case 'stepBack': return inv.stage === 'decision' && /^s_/.test(inv.sub || '') && stepInfo(inv.sub).back && P(inv.sub);
     case 'toggleUrgent': return ['new', 'acc', 'decision'].includes(inv.stage) && (P('urgent_all') || (P('create') && own));
     case 'delete': return P('trash');
     case 'home': return !!S.BOARDS && S.BOARDS.length > 1;

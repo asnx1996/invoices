@@ -1,5 +1,5 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
-import { S, changed, hasRole, hasPerm, getBoard, DEFAULT_ROLE_DEFS } from './state.js';
+import { S, changed, hasRole, hasPerm, getBoard, DEFAULT_ROLE_DEFS, DEFAULT_STEPS } from './state.js';
 import { toast, DAY, setCurrency, setRate } from './util.js';
 
 import { createLocalClient } from './local-client.js';
@@ -73,6 +73,16 @@ export async function loadSettings() {
   const list = v => new Set(String(v || '').split(',').map(x => x.trim()).filter(Boolean));
   S.OPT = list(m.opt_fields);
   S.REQX = list(m.req_fields);
+  // مراحل القرار (022): الإعداد ما ينحفظ إلا بعد ما تتشغل، فبدونه نبقى على المدير ← الزبون ← المخزن
+  let st = null; try { st = JSON.parse(m.stages || 'null') } catch (e) { }
+  S.STEPS = Array.isArray(st) && st.length ? st : DEFAULT_STEPS;
+}
+
+// عدد الطلبات بكل خطوة (للأدمن). يرجّع null إذا 022 بعده ما متشغل
+export async function loadStageCounts() {
+  const { data, error } = await sb.rpc('stage_counts');
+  S.HAS_STAGES = !error;
+  return error ? null : Object.fromEntries((data || []).map(r => [r.k, +r.n]));
 }
 
 // الأدوار وصلاحياتها (018). قبلها نبقى على الافتراضي

@@ -1,11 +1,12 @@
 // داشبورد المشرف (للأدمن): كل الطلبات المعلّقة بكل البوردات بمكان واحد
 // الأدمن يشوف كل البوردات أصلاً (my_boards بـ 012)، فما تحتاج شي بالقاعدة
-import { S, BOARD_COLS, colKey, userName, boardName, daysIn } from './state.js';
+import { S, stepCols, colKey, userName, boardName, daysIn, COLS } from './state.js';
 import { sb, fetchAll } from './api.js';
 import { $, esc, fmt, money, toast, ic, DAY } from './util.js';
 import { avatarHTML } from './avatars.js';
 
-const STAGES = BOARD_COLS.filter(c => !['done', 'cancel'].includes(c.k));
+// المراحل المعلّقة: جديد، حسابات، وخطوات القرار (المفعّلة + اللي بيها طلبات)
+let STAGES = [];
 const LATE = 3; // نفس حد "متأخرة" باللوحة
 const f = { board: '', stage: '', rep: '', q: '', late: false };
 let rows = [], recent = [], span = 7, openInv = null;
@@ -29,6 +30,7 @@ export async function renderSuper() {
         .or(`created_at.gte.${since},closed_at.gte.${since}`).order('id')),
     ]);
   } catch (e) { $('#supOut').innerHTML = ''; return toast(e.message) }
+  STAGES = [COLS[0], COLS[1], ...stepCols(rows)];
   fillFilters(); paint();
 }
 

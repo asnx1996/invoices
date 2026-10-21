@@ -33,16 +33,45 @@ export const COLS = [
   { k: 'done', t: 'تمت', who: '', c: 'var(--ok)' },
   { k: 'cancel', t: 'ملغاة', who: '', c: 'var(--bad)' },
 ];
-// أعمدة اللوحة: مرحلة القرار مقسومة لثلاث أعمدة (المدير · الزبون · المخزن)
-export const BOARD_COLS = [
-  COLS[0], COLS[1],
-  { k: 'decision:mgr', t: 'قرار المدير', who: 'المدير', c: 'var(--vio)' },
-  { k: 'decision:cust', t: 'رد الزبون', who: 'المندوب · المدير', c: 'color-mix(in srgb,var(--vio) 55%,var(--primary))' },
-  { k: 'decision:wh', t: 'المخزن', who: 'المخزن', c: 'color-mix(in srgb,var(--vio) 40%,var(--ok))' },
-  COLS[3], COLS[4],
-];
 export const colKey = inv => inv.stage === 'decision' ? 'decision:' + inv.sub : inv.stage;
-export const SUB = { mgr: 'بانتظار موافقة المدير', cust: 'بانتظار رد الزبون', wh: 'بانتظار تحويل المخزن' };
+
+// خطوات مرحلة القرار (022): الأدمن يرتبها ويطفيها ويضيف عليها من الإعدادات (app_settings.stages)
+// كل خطوة {k, n: اسم، on: مفعّلة، back: ترجع للحسابات}. الأساسية تنطفي بس، والإضافية مفتاحها s_xxxx وصلاحيتها نفس المفتاح
+export const DEFAULT_STEPS = [{ k: 'mgr', on: true }, { k: 'cust', on: true }, { k: 'wh', on: true }];
+const STEP_META = {
+  mgr: { t: 'قرار المدير', sub: 'بانتظار موافقة المدير', who: 'المدير', c: 'var(--vio)', wait: 'المدير يوافق أو يرجع للحسابات', turn: 'ينتظر موافقتك', perm: 'approve', back: true },
+  cust: { t: 'رد الزبون', sub: 'بانتظار رد الزبون', who: 'المندوب · المدير', c: 'color-mix(in srgb,var(--vio) 55%,var(--primary))', wait: 'المندوب يبلغ الزبون ويأشر الرد', turn: 'بلّغ الزبون وأشّر رده', perm: 'cust_all' },
+  wh: { t: 'المخزن', sub: 'بانتظار تحويل المخزن', who: 'المخزن', c: 'color-mix(in srgb,var(--vio) 40%,var(--ok))', wait: 'المخزن يحول لمبيعات ويدخل الرقم', turn: 'جاهز للتحويل لمبيعات', perm: 'complete' },
+};
+// ألوان الخطوات الإضافية (تمشي ويا الثيمين)
+const XCOLORS = ['#0E7490', '#C2410C', '#BE185D', '#4D7C0F', '#7C3AED', '#0369A1'];
+S.STEPS = DEFAULT_STEPS;
+S.HAS_STAGES = false;   // 022 متشغل؟
+export const isBuiltinStep = k => !!STEP_META[k];
+export function stepInfo(k) {
+  const e = S.STEPS.find(x => x.k === k) || { k }, m = STEP_META[k], n = String(e.n || '').trim(), on = e.on !== false;
+  if (m) return { ...m, k, on, t: n || m.t, sub: n ? 'بانتظار ' + n : m.sub };
+  const xi = S.STEPS.filter(x => !STEP_META[x.k]).findIndex(x => x.k === k);
+  const holders = S.ROLEDEFS.filter(d => d.perms.includes(k)).map(d => d.name).join(' · ');
+  return { k, on, t: n || k, sub: 'بانتظار ' + (n || k), who: holders || 'الأدمن', c: XCOLORS[Math.max(0, xi) % XCOLORS.length],
+    wait: (n || k) + ' — يكملها ' + (holders || 'الأدمن'), turn: 'ينتظرك بمرحلة ' + (n || k), perm: k, back: !!e.back };
+}
+export const stepName = k => stepInfo(k).t;
+export const subName = k => stepInfo(k).sub;
+// الخطوة المفعّلة اللي بعد cur (null = أول خطوة). null = الطلب يكتمل — نفس stage_next بالقاعدة
+export function nextStep(cur) {
+  const at = cur == null ? -1 : S.STEPS.findIndex(e => e.k === cur);
+  return (S.STEPS.slice(at + 1).find(e => e.on !== false) || {}).k || null;
+}
+// إجراء "التالي" لكل خطوة
+export const passAction = k => ({ mgr: 'approve', cust: 'custAccept', wh: 'complete' })[k] || 'stepPass';
+// أعمدة خطوات القرار: المفعّلة + المطفية اللي بيها طلبات بالقائمة
+export const stepCols = (list = S.INVOICES) => S.STEPS
+  .filter(e => e.on !== false || list.some(i => i.stage === 'decision' && i.sub === e.k))
+  .map(e => { const s = stepInfo(e.k); return { k: 'decision:' + e.k, t: s.t, who: s.on ? s.who : 'مرحلة مطفية — بس الطلبات القديمة', c: s.c, off: !s.on } });
+export const boardCols = (list = S.INVOICES) => [COLS[0], COLS[1], ...stepCols(list), COLS[3], COLS[4]];
+// اسم أي مكان بالبورد: new / acc / decision:k / done / cancel
+export const placeName = key => String(key).startsWith('decision:') ? stepName(key.slice(9)) : (COLS.find(c => c.k === key) || {}).t || key;
 export const PAY = { cash: 'نقدي', credit: 'آجل' };
 export const PAY_LEGACY = { cheque: 'صك', transfer: 'تحويل مصرفي' };
 export const PAYER = { customer: 'على الزبون', none: 'بدون نقل' };
@@ -64,12 +93,17 @@ export const PERMS = {
   see_all: ['يشوف كل الطلبات', 'بدونها يشوف طلباته بس'],
   see_late: ['يشوف طلبات القرار والمكتملة', 'مثل المخزن'],
   see_profit: ['يشوف الربح', 'من مرحلة القرار وبعدها، بدون سعر الكلفة'],
-  reports: ['تبويب التقارير', ''],
   export: ['تصدير Excel', ''],
   customers: ['تبويب الزبائن', 'إضافة وتعديل وحذف الزبائن'],
-  users: ['تبويب المستخدمين', 'إضافة حسابات وتغيير الأدوار والرموز (ما يلمس الأدمن)'],
+  users: ['إدارة المستخدمين', 'إضافة حسابات وتغيير الأدوار والرموز من الإعدادات (ما يلمس الأدمن)'],
   trash: ['الحذف والمحذوفات', 'يحذف الطلبات ويسترجعها من السلة'],
 };
+// تقسيم الصلاحيات بصفحة الإعدادات (التقارير انشالت لحد ما ترجع بتصميم جديد)
+export const PERM_GROUPS = [
+  ['سير الطلب', 'منو يحرك الطلب بكل مرحلة', ['create', 'acc', 'approve', 'cust_all', 'complete']],
+  ['شنو يشوف', 'الطلبات والأرقام اللي تطلعله', ['see_all', 'see_late', 'see_profit']],
+  ['الإدارة', 'أدوات إضافية وتبويبات', ['move', 'urgent_all', 'trash', 'export', 'customers', 'users']],
+];
 // نفس الافتراضي بـ 018 — يستخدم قبل ما تتشغل
 export const DEFAULT_ROLE_DEFS = [
   { key: 'rep', name: 'مندوب', builtin: true, perms: ['create'] },
