@@ -282,8 +282,9 @@ section.blk h4{margin:0 0 10px;font-size:14px;color:var(--muted);display:flex;al
 .comment .c-act:focus-visible{outline:2px solid var(--primary);outline-offset:1px}
 .c-av{flex:none;margin:0!important}
 .mention{color:var(--primary);background:var(--primary-soft);border-radius:4px;padding:0 3px;font-weight:600}
-.add-c{display:flex;gap:8px;align-items:center}
-.add-c input{flex:1;min-height:40px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);padding:0 10px}
+.add-c{display:flex;gap:8px;align-items:flex-end}
+.add-c textarea{flex:1;min-height:40px;max-height:180px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);padding:9px 10px;resize:none;line-height:1.45;overflow-y:auto}
+.add-c .c-av{align-self:flex-end;margin-bottom:5px}
 
 /* Modal */
 dialog{border:0;border-radius:14px;padding:0;width:min(440px,calc(100% - 24px));background:var(--surface);color:var(--text);box-shadow:var(--shadow-lg);
@@ -345,7 +346,7 @@ td select{min-height:36px;border:1px solid var(--border);border-radius:8px;backg
 .busy{cursor:progress}
 /* الأجهزة اللمسية: كل هدف 44px على الأقل */
 @media (pointer:coarse){
-  .btn,.btn.sm,.tab,.chk,.toggle,.toolbar select,.page-head input,.page-head select,.add-c input{min-height:44px}
+  .btn,.btn.sm,.tab,.chk,.toggle,.toolbar select,.page-head input,.page-head select,.add-c textarea{min-height:44px}
   .icon-btn{width:44px;height:44px}
   .role-chk{min-height:36px;padding-inline:12px}
 }

@@ -434,6 +434,8 @@ export function renderDrawer() {
   // نحافظ على مكان التمرير والحقل المحدد بعد إعادة الرسم
   const body = $('#drawer .d-body'), scroll = body ? body.scrollTop : 0;
   const act = document.activeElement, focusId = act && $('#drawer').contains(act) ? act.id : null;
+  // مكان المؤشر بالحقل (التحديثات المباشرة تعيد رسم الدرج وما نريد الكتابة تتخربط)
+  const sel = focusId && typeof act.selectionStart === 'number' ? [act.selectionStart, act.selectionEnd] : null;
   const qDis = eb || (filled(inv.res_no) && !filled(inv.quote_no));
   const rDis = eb || (filled(inv.quote_no) && !filled(inv.res_no));
   $('#drawer').innerHTML = `
@@ -470,7 +472,7 @@ export function renderDrawer() {
     ${!draft && can('seeTerms', inv) ? termsHTML(inv) : ''}
     ${draft ? '' : `<section class="blk"><h4>التعليقات</h4>
       ${extra.comments.map(commentHTML).join('') || '<div class="help" style="margin-bottom:8px">لا توجد تعليقات</div>'}
-      <div class="add-c">${avatarHTML(S.ME, 30, 'c-av')}<input type="text" id="cIn" data-mention="1" autocomplete="off" placeholder="اكتب تعليق... (@ حتى تذكر شخص)" aria-label="تعليق"><button class="btn primary" id="cBtn">إرسال</button></div></section>
+      <div class="add-c">${avatarHTML(S.ME, 30, 'c-av')}<textarea id="cIn" rows="1" data-mention="1" autocomplete="off" placeholder="اكتب تعليق... (@ حتى تذكر شخص · Shift+Enter سطر جديد)" aria-label="تعليق">${esc(cDrafts[S.drawerId] || '')}</textarea><button class="btn primary" id="cBtn">إرسال</button></div></section>
     <details class="more blk" data-more="log" ${shown.log ? 'open' : ''}><summary>سجل الحركة${extra.log.length ? ` (${extra.log.length})` : ''}</summary>
       <ul class="timeline">${extra.log.slice().reverse().map(l => `<li><div>${esc(userName(l.actor))}: ${esc(l.body)}</div><div class="t">${dt(l.at)}</div></li>`).join('') || '<li class="help">—</li>'}</ul></details>`}
     ${draft ? '' : `<div id="saveBar" role="status" style="position:sticky;bottom:0;z-index:2;display:none;align-items:center;gap:8px;flex-wrap:wrap;margin:12px -4px 0;padding:10px 12px;background:var(--surface);border:1px solid var(--warn);border-radius:12px;box-shadow:0 -6px 18px rgb(0 0 0 / .18)">
@@ -479,7 +481,19 @@ export function renderDrawer() {
   </div>`;
   paintSaveBar();
   $('#drawer .d-body').scrollTop = scroll;
-  if (focusId) { const f = document.getElementById(focusId); if (f && !f.disabled) f.focus({ preventScroll: true }) }
+  if (focusId) {
+    const f = document.getElementById(focusId);
+    if (f && !f.disabled) { f.focus({ preventScroll: true }); if (sel && typeof f.selectionStart === 'number') try { f.setSelectionRange(sel[0], sel[1]) } catch (e) { } }
+  }
+  growComment();
+}
+
+// مسودة التعليق لكل طلب: تبقى لو انرسم الدرج من جديد أو انسد وانفتح
+const cDrafts = {};
+function growComment() {
+  const t = $('#cIn'); if (!t) return;
+  t.style.height = 'auto';
+  t.style.height = Math.min(t.scrollHeight + 2, 180) + 'px';
 }
 
 // ---------- فواتير إكسترا (نسخة الحاسبة): الضغط على "رقم عرض السعر" يفتح بحث بفواتير المبيعات ----------
@@ -529,11 +543,16 @@ function openXtraBills(inv) {
   setTimeout(() => $('#xq').focus(), 30);
 }
 
+let sending = false;
 async function addComment() {
-  const v = $('#cIn').value.trim(); if (!v) return;
-  const { error } = await sb.from('invoice_comments').insert({ invoice_id: S.drawerId, body: v });
+  const id = S.drawerId, v = $('#cIn').value.trim(); if (!v || sending) return;
+  sending = true;
+  const { error } = await sb.from('invoice_comments').insert({ invoice_id: id, body: v });
+  sending = false;
   if (error) return toast(error.message);
-  extra.comments = await loadComments(S.drawerId); renderDrawer();
+  delete cDrafts[id];
+  const t = $('#cIn'); if (t && S.drawerId === id) t.value = '';
+  extra.comments = await loadComments(id); renderDrawer();
 }
 
 async function save(inv, patch, rerender) {
@@ -671,7 +690,9 @@ export function initDrawer() {
   // نتذكر إذا المستخدم فتح "مراحل الطلب" أو "سجل الحركة"
   d.addEventListener('toggle', e => { const k = e.target.dataset && e.target.dataset.more; if (k) shown[k] = e.target.open }, true);
   initSwipe(d);
-  d.addEventListener('keydown', e => { if (e.target.id === 'cIn' && e.key === 'Enter') { e.preventDefault(); addComment() } });
+  // Enter يرسل، Shift+Enter ينزل سطر (وأثناء كتابة العربي بلوحة IME ما نرسل)
+  d.addEventListener('keydown', e => { if (e.target.id === 'cIn' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); addComment() } });
+  d.addEventListener('input', e => { if (e.target.id === 'cIn') { cDrafts[S.drawerId] = e.target.value; growComment() } });
 
   // أثناء الكتابة (قبل ما يطلع من الحقل) الحقل يتلون إذا صار يختلف عن المحفوظ
   d.addEventListener('input', e => {
