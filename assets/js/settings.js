@@ -377,10 +377,13 @@ async function togglePerm(t) {
   // صاحب مرحلة إضافية لازم يشوف طلبات القرار حتى يكدر يكملها
   const addSee = t.checked && /^s_/.test(t.value) && !perms.includes('see_all') && !perms.includes('see_late');
   if (addSee) perms.push('see_late');
+  // طلبات كل المندوبين بلا ما يشوفها ما إلها معنى
+  const addAll = t.checked && t.value === 'rep_all' && !perms.includes('see_all');
+  if (addAll) perms.push('see_all');
   const { error } = await sb.from('role_defs').update({ perms }).eq('key', d.key);
   if (error) { t.checked = !t.checked; return toast(error.message) }
   d.perms = perms; changed();
-  toast(`${d.name}: ${t.checked ? 'انضافت' : 'انشالت'} "${permTitle(t.value)}"${addSee ? ' + يشوف طلبات القرار' : ''}`);
+  toast(`${d.name}: ${t.checked ? 'انضافت' : 'انشالت'} "${permTitle(t.value)}"${addSee ? ' + يشوف طلبات القرار' : ''}${addAll ? ' + يشوف كل الطلبات' : ''}`);
   paint();
 }
 

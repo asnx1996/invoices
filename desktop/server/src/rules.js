@@ -6,7 +6,7 @@ export class AppError extends Error { constructor(msg, status = 400) { super(msg
 export const fail = (msg, status) => { throw new AppError(msg, status) };
 
 export const ALL_PERMS = ['create', 'acc', 'approve', 'cust_all', 'complete', 'move', 'urgent_all', 'see_all', 'see_late',
-  'see_profit', 'reports', 'export', 'customers', 'users', 'trash'];
+  'see_profit', 'reports', 'export', 'customers', 'users', 'trash', 'rep_all'];
 const ACTIVE_STAGES = ['new', 'acc', 'decision'];
 const STEP_KEY = /^(mgr|cust|wh|s_[a-z0-9]{1,20})$/;
 const permOk = x => ALL_PERMS.includes(x) || /^s_[a-z0-9]{1,20}$/.test(x);   // s_xxxx = صلاحية خطوة إضافية (022)
@@ -152,6 +152,8 @@ export async function loadUser(r, uid) {
   return u;
 }
 export const perm = (u, p) => u.admin || u.roleOnly.has(p);   // user_perm
+// rep_mine (023): طلبي كمندوب، أو عندي صلاحية طلبات كل المندوبين
+export const repMine = (u, rep) => (perm(u, 'create') && rep === u.uid) || perm(u, 'rep_all');
 export const rolePerm = (u, p) => u.roleOnly.has(p);          // role_perm (بدون استثناء الأدمن)
 export const inBoard = (u, b) => u.boards.includes(b);
 export const needActive = u => { if (!u.active) fail('الحساب غير مفعّل', 403) };
@@ -318,7 +320,7 @@ export async function updateInvoice(r, ctx, id, patch, { direct = false } = {}) 
 // invoices_guard: منو يعدل شنو (للتعديل المباشر)
 function invoicesGuard(u, old, nw, changed) {
   needActive(u);
-  const canBasic = u.admin || (perm(u, 'create') && old.rep_id === u.uid && old.stage === 'new');
+  const canBasic = u.admin || (repMine(u, old.rep_id) && old.stage === 'new');
   const canTerms = u.admin || (perm(u, 'acc') && old.stage === 'acc');
   const basic = ['customer', 'customer_id', 'quote_no', 'res_no', 'value', 'pdf_path', 'pdf_name', 'pdf_size'];
   const terms = ['payment', 'credit_days', 'credit_months', 'payer', 'transport_amt', 'unload_amt', 'ld', 'ld_pct', 'ld_due', 'from_purch',
@@ -407,7 +409,7 @@ export const POLICY = {
       if (!inBoard(u, row.board_id ?? 1)) no();
       if (!(u.admin || (perm(u, 'create') && row.rep_id === u.uid))) no();
     },
-    updUsing: (u, o) => inBoard(u, o.board_id) && (u.admin || (perm(u, 'create') && o.rep_id === u.uid && o.stage === 'new') || (perm(u, 'acc') && o.stage === 'acc')),
+    updUsing: (u, o) => inBoard(u, o.board_id) && (u.admin || (repMine(u, o.rep_id) && o.stage === 'new') || (perm(u, 'acc') && o.stage === 'acc')),
     del: u => u.admin,
   },
   invoice_costs: { read: u => u.admin ? raw('1 = 1') : raw('1 = 0') },

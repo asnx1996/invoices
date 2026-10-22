@@ -1,7 +1,7 @@
 import { S, COLS, subName, stepInfo, PAY, PAY_LEGACY, PAYER, PAYER_LEGACY, MONTHS, POINT_RATE, hasRole, isReq, getInv, userName, reps, isActive, isUrgent,
   ldAmount, transportAdded, totalAfterTransport, pointsPct, discPct, onChange, NOTIF_LEVELS } from './state.js';
 import { renderBoard } from './board.js';
-import { $, esc, num, fmt, money, pct, dt, dOnly, ic, toast, ask, cur, rate, numAttrs, numVal } from './util.js';
+import { $, esc, num, fmt, money, pct, dt, dOnly, ic, toast, ask, cur, rate, numAttrs, numVal, shareInv } from './util.js';
 import { sb, rpc, refreshInvoice, loadCustomers, LOCAL } from './api.js';
 import { can } from './can.js';
 import { run, waitingOn, missingBasic, missingTerms } from './actions.js';
@@ -449,6 +449,7 @@ export function renderDrawer() {
         <option value="">حسب إعدادي العام (${NOTIF_LEVELS[S.ME.notif_level] || ''})</option>
         ${Object.entries(NOTIF_LEVELS).map(([k, t]) => `<option value="${k}" ${S.NPREFS[inv.id] === k ? 'selected' : ''}>${t}</option>`).join('')}</select></label>`}
     </div>
+    ${draft ? '' : `<button class="icon-btn share" title="مشاركة رابط الطلب" aria-label="مشاركة رابط الطلب">${ic('link')}</button>`}
     <button class="icon-btn close" aria-label="إغلاق">${ic('x')}</button>
   </div>
   <div class="d-body">
@@ -674,6 +675,7 @@ export function initDrawer() {
   d.addEventListener('mousedown', e => { if (e.target.closest('#saveDraft,#saveEdits')) e.preventDefault() });
   d.addEventListener('click', e => {
     if (e.target.closest('.close')) return closeDrawer();
+    if (e.target.closest('.d-head .share')) return shareInv(S.drawerId, (getInv(S.drawerId) || {}).customer);
     const a = e.target.closest('[data-act]');
     if (a) return dirty() ? toast('احفظ التعديلات أو تراجع عنها أول') : run(a.dataset.act, S.drawerId);
     if (e.target.closest('#saveEdits')) return saveEdits();

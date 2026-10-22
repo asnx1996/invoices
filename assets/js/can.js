@@ -4,7 +4,8 @@ import { S, hasRole, hasPerm, stepInfo } from './state.js';
 // الصلاحيات يوزعها الأدمن على الأدوار من الإعدادات؛ الأدمن عنده كلشي
 export function can(a, inv) {
   const admin = hasRole('admin'), P = hasPerm;
-  const own = inv && inv.rep_id === S.ME.id;
+  // طلبي كمندوب، أو عندي صلاحية طلبات كل المندوبين (023)
+  const mine = inv && ((P('create') && inv.rep_id === S.ME.id) || P('rep_all'));
   switch (a) {
     case 'create': return P('create');
     case 'export': return P('export');
@@ -14,21 +15,21 @@ export function can(a, inv) {
     // الإعدادات: الأدمن كلها، وصاحب صلاحية المستخدمين يشوف قسم المستخدمين بس
     case 'settings': return admin || P('users');
     case 'backup': case 'super': return admin;
-    case 'editBasic': return admin || (inv.stage === 'new' && P('create') && own);
-    case 'editValue': return admin || (inv.stage === 'new' && P('create') && own) || (inv.stage === 'acc' && P('acc'));
-    case 'sendToAcc': return inv.stage === 'new' && (admin || (P('create') && own));
+    case 'editBasic': return admin || (inv.stage === 'new' && mine);
+    case 'editValue': return admin || (inv.stage === 'new' && mine) || (inv.stage === 'acc' && P('acc'));
+    case 'sendToAcc': return inv.stage === 'new' && (admin || mine);
     case 'editTerms': return admin || (inv.stage === 'acc' && P('acc'));
     case 'sendToDecision': return inv.stage === 'acc' && P('acc');
     case 'setCost': return admin || (inv.stage === 'acc' && P('acc'));
     case 'returnToRep': return inv.stage === 'acc' && P('acc');
     case 'move': return P('move');
     case 'approve': case 'returnToAcc': return inv.stage === 'decision' && inv.sub === 'mgr' && P('approve');
-    case 'custAccept': case 'custRefuse': return inv.stage === 'decision' && inv.sub === 'cust' && (P('cust_all') || (P('create') && own));
+    case 'custAccept': case 'custRefuse': return inv.stage === 'decision' && inv.sub === 'cust' && (P('cust_all') || mine);
     case 'complete': return inv.stage === 'decision' && inv.sub === 'wh' && P('complete');
     // الخطوات الإضافية (022): صلاحيتها بنفس مفتاحها
     case 'stepPass': return inv.stage === 'decision' && /^s_/.test(inv.sub || '') && P(inv.sub);
     case 'stepBack': return inv.stage === 'decision' && /^s_/.test(inv.sub || '') && stepInfo(inv.sub).back && P(inv.sub);
-    case 'toggleUrgent': return ['new', 'acc', 'decision'].includes(inv.stage) && (P('urgent_all') || (P('create') && own));
+    case 'toggleUrgent': return ['new', 'acc', 'decision'].includes(inv.stage) && (P('urgent_all') || mine);
     case 'delete': return P('trash');
     case 'home': return !!S.BOARDS && S.BOARDS.length > 1;
     case 'setBoard': return admin && !!S.BOARDS && S.BOARDS.length > 1;

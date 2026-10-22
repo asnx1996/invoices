@@ -169,7 +169,7 @@
 
   // ---------- الصلاحيات (نفس policies بالقاعدة) ----------
   const canRead = {
-    invoices: i => !i.deleted_at && inBoard(i.board_id) && (has('admin') || has('mgr') || has('acc') || (has('wh') && ['decision', 'done'].includes(i.stage)) || (has('rep') && i.rep_id === session)),
+    invoices: i => !i.deleted_at && inBoard(i.board_id) && (has('admin') || has('mgr') || has('acc') || (has('wh') && ['decision', 'done'].includes(i.stage)) || (has('rep') && i.rep_id === session) || rolePerm(session, 'see_all')),
     boards: b => inBoard(b.id),
     board_members: m => inBoard(m.board_id),
     invoice_notif_prefs: r => r.user_id === session,
@@ -209,6 +209,8 @@
   const stepName = k => String((STEPS().find(e => e.k === k) || {}).n || '').trim() || { mgr: 'موافقة المدير', cust: 'رد الزبون', wh: 'المخزن' }[k] || k;
   const placeName = k => ({ new: 'طلب جديد', acc: 'الحسابات', cancel: 'ملغاة', done: 'تمت' })[k] || stepName(String(k).split(':')[1]);
   const rolePerm = (uid, p) => { const u = db.profiles.find(x => x.id === uid); return !!u && u.active && db.role_defs.some(d => [...u.roles, ...(u.xroles || [])].includes(d.key) && d.perms.includes(p)) };
+  // 023: طلبي كمندوب، أو صلاحية طلبات كل المندوبين
+  const repMine = v => (has('rep') && v.rep_id === session) || rolePerm(session, 'rep_all');
   const hasPerm = p => has('admin') || rolePerm(session, p);
   const turnUsers = (stage, sub, rep) => {
     if (stage === 'new' || (stage === 'decision' && sub === 'cust')) return rep ? [rep] : [];
@@ -238,7 +240,7 @@
     const keys = Object.keys(patch);
     const admin = has('admin');
     if (!admin) {
-      const okBasic = inv.stage === 'new' && has('rep') && inv.rep_id === session;
+      const okBasic = inv.stage === 'new' && repMine(inv);
       const okTerms = inv.stage === 'acc' && has('acc');
       for (const k of keys) {
         if (['value', 'disc_req', 'disc_pct'].includes(k) && (okBasic || okTerms)) continue;
@@ -438,7 +440,7 @@
     inv_send_to_acc({ p_id }) {
       const v = getInvFor(p_id);
       if (v.stage !== 'new') throw new Error('الطلب مو بمرحلة طلب جديد');
-      if (!(has('admin') || (has('rep') && v.rep_id === session))) throw new Error('ما عندك صلاحية');
+      if (!(has('admin') || repMine(v))) throw new Error('ما عندك صلاحية');
       if (v.customer_id == null) throw new Error('اختار الزبون من القائمة');
       if (blank(v.quote_no) === blank(v.res_no)) throw new Error('اكتب رقم عرض السعر أو رقم الحجز (واحد منهم فقط)');
       if (!(+v.value > 0)) throw new Error('قيمة الفاتورة مطلوبة');
@@ -509,15 +511,19 @@
     inv_customer_accept({ p_id }) {
       const v = getInvFor(p_id);
       if (v.stage !== 'decision' || v.sub !== 'cust') throw new Error('الطلب مو بانتظار رد الزبون');
-      if (!(has('mgr') || has('admin') || (has('rep') && v.rep_id === session))) throw new Error('ما عندك صلاحية');
+      if (!(has('mgr') || has('admin') || repMine(v))) throw new Error('ما عندك صلاحية');
       advance(v, 'cust', 'أكد موافقة الزبون'); return v;
     },
-    inv_customer_refuse({ p_id, p_reason }) {
+    inv_customer_refuse({ p_id, p_reason, p_back }) {
       const v = getInvFor(p_id);
       if (v.stage !== 'decision' || v.sub !== 'cust') throw new Error('الطلب مو بانتظار رد الزبون');
-      if (!(has('mgr') || has('admin') || (has('rep') && v.rep_id === session))) throw new Error('ما عندك صلاحية');
+      if (!(has('mgr') || has('admin') || repMine(v))) throw new Error('ما عندك صلاحية');
       if (blank(p_reason)) throw new Error('سبب الرفض مطلوب');
-      v.cancel_reason = p_reason; move(v, 'cancel', null, 'سجل رفض الزبون وألغى الطلب'); return v;
+      if (!p_back) { v.cancel_reason = p_reason; move(v, 'cancel', null, 'سجل رفض الزبون وألغى الطلب'); return v }
+      const mgrOn = STEPS().some(e => e.k === 'mgr' && e.on !== false), to = mgrOn ? 'للمدير' : 'للحسابات';
+      v.returned = (v.returned || 0) + 1;
+      db.invoice_comments.push({ id: db.seq.invoice_comments++, invoice_id: v.id, author: session, body: 'الزبون رفض — رجع ' + to + ': ' + p_reason.trim(), is_system: true, at: iso(Date.now()) });
+      move(v, mgrOn ? 'decision' : 'acc', mgrOn ? 'mgr' : null, 'سجل رفض الزبون وأرجع الطلب ' + to); return v;
     },
     inv_complete({ p_id, p_sales_no }) {
       const v = getInvFor(p_id);
@@ -550,7 +556,7 @@
     inv_set_urgent({ p_id, p_on }) {
       const v = getInvFor(p_id);
       if (!['new', 'acc', 'decision'].includes(v.stage)) throw new Error('الطلب مغلق');
-      if (!(has('admin') || has('mgr') || (has('rep') && v.rep_id === session))) throw new Error('ما عندك صلاحية');
+      if (!(has('admin') || has('mgr') || repMine(v))) throw new Error('ما عندك صلاحية');
       if (!!v.urgent === !!p_on) return null;
       v.urgent = !!p_on; addLog(v.id, p_on ? 'أشّر الطلب طارئ' : 'شال علامة طارئ'); return null;
     },

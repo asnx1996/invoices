@@ -515,6 +515,11 @@ body.has-bg .home-title,body.has-bg .home-sub{display:inline-block;background:co
 .c-foot .c-nopdf{display:inline-flex;color:var(--bad)}
 .c-foot .c-nopdf svg.i{width:14px;height:14px}
 .c-foot .more-btn{margin:-6px auto -6px -6px}
+.share-btn{position:relative;z-index:1;width:30px;height:30px;margin:-6px auto -6px 0;display:grid;place-items:center;border:0;border-radius:8px;background:transparent;color:var(--faint);cursor:pointer;transition:background .15s,color .15s}
+.share-btn svg.i{width:16px;height:16px}
+.c-foot .share-btn + .more-btn{margin:-6px 0 -6px -6px}
+@media (hover:hover){.share-btn:hover{background:var(--surface-2);color:var(--text)}}
+@media (pointer:coarse){.share-btn{width:40px;height:40px;margin:-10px auto -10px -4px}}
 .card.late:not(.urgent){box-shadow:inset 3px 0 0 var(--bad),var(--shadow-card)}
 
 /* قائمة بيها بحث (الفلاتر) */

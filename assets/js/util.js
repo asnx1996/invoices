@@ -47,6 +47,24 @@ export const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
 export const genPw = () => { const c = 'abcdefghjkmnpqrstuvwxyz23456789', a = new Uint32Array(10); crypto.getRandomValues(a); return [...a].map(x => c[x % c.length]).join('') };
 export const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms) } };
 
+// رابط الطلب (#inv-12): يفتح الطلب مباشرة بعد تسجيل الدخول، والصلاحيات نفسها تنطبق على اللي يفتحه
+export const invUrl = id => location.origin + location.pathname + '#inv-' + id;
+export async function shareInv(id, name) {
+  const url = invUrl(id), title = 'الطلب #' + id + (name ? ' — ' + name : '');
+  // الموبايل: قائمة المشاركة (واتساب، تيليكرام...). الحاسبة: نسخ
+  if (navigator.share && matchMedia('(pointer:coarse)').matches) {
+    try { await navigator.share({ title, url }); return } catch (e) { if (e.name === 'AbortError') return }
+  }
+  try { await navigator.clipboard.writeText(url) }
+  catch (e) {
+    // نسخة الشبكة المحلية (http) ما بيها clipboard
+    const t = document.createElement('textarea'); t.value = url; t.style.cssText = 'position:fixed;opacity:0';
+    document.body.append(t); t.select(); const ok = document.execCommand('copy'); t.remove();
+    if (!ok) return toast('رابط الطلب: ' + url);
+  }
+  toast('انتسخ رابط الطلب #' + id);
+}
+
 let tt;
 export function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => t.classList.remove('show'), Math.max(3500, String(m).length * 90)) } // الرسائل الطويلة تبقى وقت يكفي لقراءتها
 

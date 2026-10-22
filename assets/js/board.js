@@ -1,5 +1,5 @@
 import { S, boardCols, colKey, MONTHS, getInv, userName, reps, isActive, isUrgent, ageLevel, daysIn, hasPerm, getBoard, stepCols, nextStep, passAction } from './state.js';
-import { $, $$, esc, num, money, pct, ic, toast, ask } from './util.js';
+import { $, $$, esc, num, money, pct, ic, toast, ask, shareInv } from './util.js';
 import { avatarHTML } from './avatars.js';
 import { can } from './can.js';
 import { run, waitingOn, moveTo } from './actions.js';
@@ -83,6 +83,7 @@ function cardHTML(inv) {
     ${alert.length ? `<div class="badges">${alert.join('')}</div>` : ''}
     <div class="c-foot"><span class="id">#${inv.id}</span><span class="c-rep">${esc(rep)}</span>
       ${inv.pdf_path ? '' : `<span class="c-nopdf" title="ما مرفوع PDF">${ic('clip')}</span>`}
+      <button type="button" class="share-btn" title="مشاركة رابط الطلب" aria-label="مشاركة رابط الطلب ${inv.id}">${ic('link')}</button>
       <button type="button" class="more-btn" aria-expanded="${open}" aria-controls="cx${inv.id}" aria-label="${open ? 'إخفاء' : 'عرض'} تفاصيل الطلب ${inv.id}">${ic('chev')}</button></div>
     <div class="extra" id="cx${inv.id}" ${open ? '' : 'inert'}><div>
       <div class="refs">${esc(refs)}</div>
@@ -213,6 +214,8 @@ export function initBoard() {
       folded.has(k) ? folded.delete(k) : folded.add(k); keep('ib_folded', [...folded]); peekCol = null; renderBoard(); return;
     }
     if (e.target.closest('.col-sort')) return;
+    const sh = e.target.closest('.share-btn');
+    if (sh) { const id = +sh.closest('.card').dataset.id; return shareInv(id, (getInv(id) || {}).customer) }
     const m = e.target.closest('.more-btn');
     if (m) { const id = +m.closest('.card').dataset.id; flipped.has(id) ? flipped.delete(id) : flipped.add(id); toggleCard(m.closest('.card')); return }
     const c = e.target.closest('.card'); if (c) openDrawer(+c.dataset.id);

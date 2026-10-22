@@ -100,8 +100,15 @@ export const ACTIONS = {
       v => step('inv_move', { p_id: inv.id, p_target: v.t, p_reason: v.r || null }, 'انتقل الطلب إلى: ' + placeName(v.t), inv.id), { okText: 'نقل' });
   },
   custAccept: inv => step('inv_customer_accept', { p_id: inv.id }, 'الزبون موافق. ' + afterStep('cust'), inv.id),
-  custRefuse: inv => ask('الزبون رفض', [{ id: 'r', label: 'سبب الرفض', type: 'textarea', req: true }],
-    v => step('inv_customer_refuse', { p_id: inv.id, p_reason: v.r }, 'انتقل الطلب للملغاة', inv.id)),
+  custRefuse: inv => {
+    // يرجع للمدير (يعيد النظر بالشروط) أو ينلغى. إذا مرحلة المدير مطفية يرجع للحسابات
+    const mgrOn = S.STEPS.some(e => e.k === 'mgr' && e.on !== false), back = mgrOn ? 'للمدير' : 'للحسابات';
+    ask('الزبون رفض', [{ id: 'to', label: 'شنو يصير بالطلب؟', type: 'select', req: true,
+      opts: `<option value="back">يرجع ${back} (يعيد النظر بالشروط)</option><option value="cancel">ينلغى الطلب</option>` },
+      { id: 'r', label: 'سبب الرفض', type: 'textarea', req: true }],
+      v => step('inv_customer_refuse', { p_id: inv.id, p_reason: v.r, p_back: v.to === 'back' },
+        v.to === 'back' ? 'رجع الطلب ' + back : 'انتقل الطلب للملغاة', inv.id));
+  },
   complete: inv => ask('تحويل إلى مبيعات', [{ id: 's', label: 'رقم فاتورة المبيعات بالنظام', type: 'text', req: true }],
     v => step('inv_complete', { p_id: inv.id, p_sales_no: v.s }, afterStep('wh'), inv.id)),
   // الخطوات الإضافية (مثل التدقيق)

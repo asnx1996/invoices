@@ -782,6 +782,37 @@ begin
   perform pg_temp.t_eq('مراحل: صلاحية المرحلة المحذوفة تنشال', $q$select ('s_audit' = any(perms))::text from public.role_defs where key = 'acc'$q$, 'false');
   perform pg_temp.t_eq('مراحل: عدد الطلبات بكل مرحلة للأدمن', format('select n::text from public.stage_counts() where k = %L', 'cust'),
     (select count(*)::text from public.invoices where stage = 'decision' and sub = 'cust' and deleted_at is null));
+  -- رفض الزبون: يرجع للمدير أو ينلغى (023)
+  perform pg_temp.as_user(u_rep2);
+  perform pg_temp.t_denied('رفض الزبون: مندوب ثاني ما يرفض', format('select public.inv_customer_refuse(%s, %L, true)', i_st3, 'غالي'));
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_denied('رفض الزبون: السبب مطلوب', format('select public.inv_customer_refuse(%s, %L, true)', i_st3, ' '));
+  perform pg_temp.t_ok('رفض الزبون: يرجع للمدير', format('select public.inv_customer_refuse(%s, %L, true)', i_st3, 'السعر غالي'));
+  perform pg_temp.t_eq('رفض الزبون: الطلب عند المدير', format('select stage || '':'' || sub || '':'' || returned from public.invoices where id = %s', i_st3), 'decision:mgr:1');
+  perform pg_temp.as_user(u_mgr);
+  perform pg_temp.t_ok('رفض الزبون: المدير يوافق مرة ثانية', format('select public.inv_approve(%s)', i_st3));
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_ok('رفض الزبون: بدون خيار ينلغى (مثل قبل)', format('select public.inv_customer_refuse(%s, %L)', i_st3, 'ما يريد'));
+  perform pg_temp.t_eq('رفض الزبون: الطلب ملغى', format('select stage::text || '':'' || cancel_reason from public.invoices where id = %s', i_st3), 'cancel:ما يريد');
+  -- طلبات كل المندوبين (023): rep2 ياخذ دور إضافي بيه rep_all
+  perform pg_temp.as_owner();
+  insert into public.invoices (rep_id, customer_id, quote_no, value) values (u_rep1, c1, 'Q-ra', 100) returning id into i_st3;
+  perform pg_temp.as_user(u_rep2);
+  perform pg_temp.t_ok('كل المندوبين: بدون الصلاحية ما يعدل طلب غيره',
+    format('update public.invoices set value = 200 where id = %s', i_st3), 0);
+  perform pg_temp.t_denied('كل المندوبين: بدون الصلاحية ما يرسل طلب غيره', format('select public.inv_send_to_acc(%s)', i_st3));
+  perform pg_temp.as_user(u_admin);
+  perform pg_temp.t_ok('كل المندوبين: الأدمن يسوي الدور', $q$insert into public.role_defs (key, name, perms) values ('r_repall', 'مندوب مشرف', '{rep_all,see_all}')$q$, 1);
+  perform pg_temp.as_owner();
+  update public.profiles set xroles = '{r_repall}' where id = u_rep2;
+  perform pg_temp.as_user(u_rep2);
+  perform pg_temp.t_ok('كل المندوبين: يعدل طلب مندوب ثاني', format('update public.invoices set value = 200 where id = %s', i_st3), 1);
+  perform pg_temp.t_ok('كل المندوبين: يأشره طارئ', format('select public.inv_set_urgent(%s, true)', i_st3));
+  perform pg_temp.t_ok('كل المندوبين: يرسله للحسابات', format('select public.inv_send_to_acc(%s)', i_st3));
+  perform pg_temp.t_ok('كل المندوبين: ما يعدل بعد الحسابات', format('update public.invoices set value = 300 where id = %s', i_st3), 0);
+  perform pg_temp.t_denied('كل المندوبين: ما يغير المندوب', format('update public.invoices set rep_id = %L where id = %s', u_rep2, i_st3));
+  perform pg_temp.as_owner();
+  update public.profiles set xroles = '{}' where id = u_rep2;
 
   -- ---------------- النتيجة ----------------
   perform pg_temp.as_owner();

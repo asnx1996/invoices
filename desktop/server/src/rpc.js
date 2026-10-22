@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import { sql, join } from './db.js';
 import {
-  fail, perm, inBoard, needActive, canSee, getInvoice, addLog, addComment, updateInvoice, fields, profitRow,
+  fail, perm, repMine, inBoard, needActive, canSee, getInvoice, addLog, addComment, updateInvoice, fields, profitRow,
   fromDb, loadUser, notify, profileBeforeWrite, ACTIVE_STAGES, invoiceVisible,
   stageList, stageNext, stageName, stageLabel, stageBackOk,
 } from './rules.js';
@@ -34,7 +34,7 @@ export const RPC = {
     const u = ctx.user; needActive(u);
     const v = await lockInvoice(r, p_id);
     if (v.stage !== 'new') fail('الطلب مو بمرحلة طلب جديد');
-    if (!(u.admin || (perm(u, 'create') && v.rep_id === u.uid))) fail('ما عندك صلاحية');
+    if (!(u.admin || repMine(u, v.rep_id))) fail('ما عندك صلاحية');
     const f = await fields(r);
     if (f.req('customer') && v.customer_id == null) fail('اختار الزبون من القائمة');
     if (trim(v.quote_no) && trim(v.res_no)) fail('اكتب رقم عرض السعر أو رقم الحجز (واحد منهم فقط)');
@@ -110,20 +110,28 @@ export const RPC = {
     const u = ctx.user; needActive(u);
     const v = await lockInvoice(r, p_id);
     if (v.stage !== 'decision' || v.sub !== 'cust') fail('الطلب مو بانتظار رد الزبون');
-    if (!(perm(u, 'cust_all') || (perm(u, 'create') && v.rep_id === u.uid))) fail('ما عندك صلاحية');
+    if (!(perm(u, 'cust_all') || repMine(u, v.rep_id))) fail('ما عندك صلاحية');
     const nw = await advance(r, ctx, p_id, 'cust');
     await addLog(r, u, p_id, 'أكد موافقة الزبون');
     return nw;
   },
 
-  async inv_customer_refuse(r, ctx, { p_id, p_reason }) {
+  // 023: p_back = يرجع للمدير (أو للحسابات إذا المدير مطفي)، بدونه ينلغى
+  async inv_customer_refuse(r, ctx, { p_id, p_reason, p_back }) {
     const u = ctx.user; needActive(u);
     const v = await lockInvoice(r, p_id);
     if (v.stage !== 'decision' || v.sub !== 'cust') fail('الطلب مو بانتظار رد الزبون');
-    if (!(perm(u, 'cust_all') || (perm(u, 'create') && v.rep_id === u.uid))) fail('ما عندك صلاحية');
+    if (!(perm(u, 'cust_all') || repMine(u, v.rep_id))) fail('ما عندك صلاحية');
     if (!trim(p_reason)) fail('سبب الرفض مطلوب');
-    const nw = await setStage(r, ctx, p_id, { stage: 'cancel', sub: null, cancel_reason: p_reason, closed_at: new Date() });
-    await addLog(r, u, p_id, 'سجل رفض الزبون وألغى الطلب');
+    if (!p_back) {
+      const nw = await setStage(r, ctx, p_id, { stage: 'cancel', sub: null, cancel_reason: p_reason, closed_at: new Date() });
+      await addLog(r, u, p_id, 'سجل رفض الزبون وألغى الطلب');
+      return nw;
+    }
+    const mgrOn = (await stageList(r)).some(e => e.k === 'mgr' && e.on !== false), to = mgrOn ? 'للمدير' : 'للحسابات';
+    const nw = await setStage(r, ctx, p_id, { stage: mgrOn ? 'decision' : 'acc', sub: mgrOn ? 'mgr' : null, returned: (v.returned || 0) + 1 });
+    await addComment(r, ctx, p_id, 'الزبون رفض — رجع ' + to + ': ' + trim(p_reason), true);
+    await addLog(r, u, p_id, 'سجل رفض الزبون وأرجع الطلب ' + to);
     return nw;
   },
 
@@ -222,7 +230,7 @@ export const RPC = {
     const v = await lockInvoice(r, p_id);
     if (!canSee(u, v)) fail('الطلب غير موجود');
     if (!ACTIVE_STAGES.includes(v.stage)) fail('الطلب مغلق');
-    if (!(perm(u, 'urgent_all') || (perm(u, 'create') && v.rep_id === u.uid))) fail('ما عندك صلاحية');
+    if (!(perm(u, 'urgent_all') || repMine(u, v.rep_id))) fail('ما عندك صلاحية');
     const on = !!p_on;
     if (v.urgent === on) return null;
     await updateInvoice(r, ctx, p_id, { urgent: on });

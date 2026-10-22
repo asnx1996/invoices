@@ -8,7 +8,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { networkInterfaces } from 'node:os';
 import { config, saveConfig, filesDir, SERVER_DIR } from './config.js';
 import { connect, db, tx, sql } from './db.js';
-import { AppError, loadUser, getInvoice, canSee, perm, fail } from './rules.js';
+import { AppError, loadUser, getInvoice, canSee, perm, repMine, fail } from './rules.js';
 import { runQuery } from './query.js';
 import { RPC, notifyLate } from './rpc.js';
 import { login, logout, sessionUser, changeOwnPassword } from './auth.js';
@@ -55,7 +55,7 @@ async function storage(req, res, url, user, action) {
     if (body.subarray(0, 5).toString() !== '%PDF-') fail('الملف لازم PDF');
     await inTx(user, async (r, ctx) => {
       const u = ctx.user, inv = await getInvoice(r, +path.split('/')[0]);
-      if (!inv || !(u.admin || (perm(u, 'create') && inv.rep_id === u.uid && inv.stage === 'new'))) fail('ما عندك صلاحية رفع ملف لهذا الطلب', 403);
+      if (!inv || !(u.admin || (repMine(u, inv.rep_id) && inv.stage === 'new'))) fail('ما عندك صلاحية رفع ملف لهذا الطلب', 403);
     });
     const full = join(filesDir(), ...path.split('/'));
     await mkdir(dirname(full), { recursive: true });
@@ -72,7 +72,7 @@ async function storage(req, res, url, user, action) {
         if (u.admin) return true;
         const inv = await getInvoice(r, +path.split('/')[0]);
         if (!inv) return true;   // الطلب انحذف نهائياً — الملف يتيم
-        return (perm(u, 'trash') && inv.deleted_at != null) || (perm(u, 'create') && inv.rep_id === u.uid && inv.stage === 'new');
+        return (perm(u, 'trash') && inv.deleted_at != null) || (repMine(u, inv.rep_id) && inv.stage === 'new');
       });
       if (!ok) continue;
       try { await unlink(join(filesDir(), ...path.split('/'))); done.push(path) } catch (e) { }
