@@ -1,5 +1,5 @@
 import { S, onChange, reps, roleHas, getInv } from './state.js';
-import { sb, getRange, setRange, setBoard, findInvoice } from './api.js';
+import { sb, getRange, setRange, setBoard, findInvoice, loadAll, subscribe } from './api.js';
 import { can } from './can.js';
 import { $, $$, toast, esc } from './util.js';
 import { initAuth } from './auth.js';
@@ -8,7 +8,7 @@ import { initDrawer, openDrawer, hideDrawer, openDraft } from './drawer.js';
 import { initSettings, renderSettings, refreshSettingsNav, addBoard } from './settings.js';
 import { initCustomers, renderCustomers } from './customers.js';
 import { initExport } from './export.js';
-import { initNotifs } from './notifications.js';
+import { initNotifs, loadNotifs, subscribeNotifs } from './notifications.js';
 import { initMentions } from './mentions.js';
 import { openAvatarPicker } from './avatars.js';
 import { initAppearance } from './appearance.js';
@@ -111,6 +111,33 @@ $('#newBtn').onclick = () => {
 initBoard(); initAppearance(); initDrawer(); initSettings(); initCustomers(); initExport(); initNotifs(); initMentions(); initTrash();
 initSuper(async id => { show('board'); if (await findInvoice(id)) openDrawer(id); else toast('الطلب #' + id + ' مو موجود') });
 $('#meBtn').onclick = () => openAvatarPicker();
+
+// تحديث البيانات بدون إعادة تحميل الصفحة: زر بالهيدر، وتلقائياً لما يرجع للتطبيق أو يرجع الإنترنت
+let refreshing = null;
+function refreshNow(quiet = false) {
+  if (!S.ME || refreshing) return refreshing;
+  const btn = $('#refreshBtn'); btn.classList.add('spin'); btn.disabled = true;
+  refreshing = (async () => {
+    try {
+      await loadAll();
+      subscribe(); subscribeNotifs(); // نعيد الاتصال المباشر إذا انقطع
+      await loadNotifs();
+      if (view === 'super') await renderSuper();
+      if (view === 'trash') await renderTrash();
+      if (view === 'home') refreshHome();
+      if (!quiet) toast('تم تحديث البيانات');
+    } catch (e) { if (!quiet) toast('ما صار التحديث، تأكد من الإنترنت') }
+    finally { btn.classList.remove('spin'); btn.disabled = false; refreshing = null }
+  })();
+  return refreshing;
+}
+$('#refreshBtn').onclick = () => refreshNow();
+let hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) hiddenAt = Date.now();
+  else if (hiddenAt && Date.now() - hiddenAt > 60e3) refreshNow(true);
+});
+addEventListener('online', () => refreshNow(true));
 initAuth(onReady);
 
 // تطبيق (PWA): يشتغل من الشاشة الرئيسية

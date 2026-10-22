@@ -184,6 +184,9 @@ input:focus,select:focus,textarea:focus{border-color:var(--primary)!important;ba
 .bell.ring svg.i{animation:ring .9s var(--ease)}
 @keyframes ring{0%,100%{transform:rotate(0)}15%{transform:rotate(16deg)}30%{transform:rotate(-14deg)}45%{transform:rotate(10deg)}60%{transform:rotate(-6deg)}75%{transform:rotate(3deg)}}
 @media (prefers-reduced-motion:reduce){.bell.ring svg.i{animation:none}}
+.refresh.spin svg.i{animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.refresh.spin svg.i{animation:none}.refresh.spin{opacity:.6}}
 .notif-pop{position:absolute;top:calc(100% - 4px);inset-inline-end:18px;width:min(400px,calc(100vw - 32px));max-height:min(560px,calc(100dvh - 90px));display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow-lg);z-index:30;overflow:hidden;transform-origin:top left;animation:pop .18s var(--ease-out)}
 @keyframes pop{from{opacity:0;transform:scale(.96) translateY(-4px)}}
 .np-head{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border)}

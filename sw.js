@@ -1,7 +1,7 @@
 // Service worker: يخلي الموقع ينثبت كتطبيق ويفتح أسرع.
 // "الشبكة أولاً": دائماً ياخذ آخر نسخة، والمخزّن بس إذا ماكو إنترنت.
 // البيانات (Supabase) ما تنخزن هنا أبداً.
-const CACHE = 'invoices-v32-rep-all';
+const CACHE = 'invoices-v33-rep-all-refresh';
 const SHELL = [
   'assets/avatars/people-3d.webp', 'assets/avatars/pixel-3d.webp', 'assets/avatars/robot-3d.webp', 'assets/avatars/animal-3d.webp', 'assets/avatars/space-3d.webp',
   './', 'index.html', 'assets/app.css', 'manifest.webmanifest', 'icons/progress-48.png', 'icons/progress-512.png', 'icons/progress-maskable-512.png', 'icons/progress-apple-180.png', 'icons/progress-192.png',
