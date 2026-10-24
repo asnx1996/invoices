@@ -2,7 +2,7 @@
 // والسيرفر يطبّق صلاحيات الجدول (POLICY) وقواعده قبل ما يكتب.
 import { sql, raw, join } from './db.js';
 import {
-  spec, col, toDb, fromDb, POLICY, fail, validate, updateInvoice, addComment, profileBeforeWrite,
+  spec, col, toDb, fromDb, POLICY, fail, validate, updateInvoice, refUnique, addComment, profileBeforeWrite,
   dropDefsCache, needActive, stagesGuard, stagesCleanup,
 } from './rules.js';
 
@@ -114,6 +114,7 @@ async function insertRow(r, ctx, table, input) {
   if (table === 'app_settings') row.updated_by = u.uid;
   pol.ins(u, row);
   validate(table, row);
+  if (table === 'invoices') await refUnique(r, null, row);
   if (table === 'app_settings' && row.key === 'stages') row.value = await stagesGuard(r, row.value, null);
   const keys = Object.keys(row);
   const out = await r.one(sql`insert into ${raw(table)} (${join(keys.map(k => col(k)))}) output inserted.*

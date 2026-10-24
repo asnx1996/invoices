@@ -294,6 +294,7 @@ export async function updateInvoice(r, ctx, id, patch, { direct = false } = {}) 
 
   const keys = Object.keys(patch);
   if (!keys.length) return old;
+  await refUnique(r, id, patch, old);
   await r.exec(sql`update invoices set ${join(keys.map(k => sql`${col(k)} = ${toDb('invoices', k, patch[k])}`))} where id = ${id}`);
   const nw = await getInvoice(r, id);
   const changed = T.invoices.cols.filter(k => !same(old[k], nw[k]));
@@ -315,6 +316,18 @@ export async function updateInvoice(r, ctx, id, patch, { direct = false } = {}) 
   if (changed.includes('notes')) await notifyNotes(r, ctx, old, nw);
   ctx.events.push({ type: 'invoice', id });
   return nw;
+}
+
+// invoices_ref_unique: رقم عرض السعر ورقم الحجز ما يتكررون (غير المحذوفات)
+export async function refUnique(r, id, row, old = {}) {
+  for (const [k, name] of [['quote_no', 'رقم عرض السعر'], ['res_no', 'رقم الحجز']]) {
+    if (!(k in row)) continue;
+    const v = String(row[k] ?? '').trim();
+    if (!v || v.toLowerCase() === String(old[k] ?? '').trim().toLowerCase()) continue;
+    const d = await r.one(sql`select top 1 id from invoices where id <> ${id ?? 0} and deleted_at is null
+      and lower(ltrim(rtrim(${raw(`[${k}]`)}))) = ${v.toLowerCase()}`);
+    if (d) fail(`${name} ${v} مكرر — مكتوب بالطلب #${d.id}`);
+  }
 }
 
 // invoices_guard: منو يعدل شنو (للتعديل المباشر)

@@ -171,6 +171,9 @@ begin
   perform pg_temp.t_denied('مندوب: ما يغير تاريخ المرحلة', format('update public.invoices set stage_at = now() - interval ''9 days'' where id = %s', i_new1));
   perform pg_temp.t_denied('مندوب: ما يعدل طلب مندوب ثاني', format($q$update public.invoices set customer = 'x' where id = %s$q$, i_new2));
   perform pg_temp.t_denied('مندوب: ما يكتب رقم حجز ويا عرض السعر', format($q$update public.invoices set res_no = 'R1' where id = %s$q$, i_new1));
+  perform pg_temp.t_denied('مندوب: رقم عرض سعر مكرر (حتى من طلب مندوب ثاني)', format($q$update public.invoices set quote_no = ' q2 ' where id = %s$q$, i_new1));
+  perform pg_temp.t_denied('مندوب: ما ينشئ طلب برقم عرض مكرر', format($q$insert into public.invoices (rep_id, customer, quote_no) values (%L, 'x', 'Q1')$q$, u_rep1));
+  perform pg_temp.t_ok('مندوب: يرجّع نفس رقمه بدون مشكلة', format($q$update public.invoices set quote_no = 'Q1' where id = %s$q$, i_new1), 1);
   perform pg_temp.t_denied('مندوب: ما يحذف حتى طلبه', format('delete from public.invoices where id = %s', i_new1));
   perform pg_temp.t_denied('مندوب: ما يستخدم inv_delete', format('select public.inv_delete(%s)', i_new1));
   perform pg_temp.t_denied('مندوب: ما يطلب حذف طلب غيره', format('select public.inv_request_delete(%s, %L)', i_new2, 'x'));

@@ -533,6 +533,8 @@ function openXtraBills(inv) {
     const usd = x.cur === 'iqd' ? Math.round(x.net / rate() * 100) / 100 : x.net;
     extra.valCur = x.cur === 'iqd' ? 'iqd' : 'usd';
     extra.iqd = x.cur === 'iqd' ? x.net : null;
+    const dup = dupRef(inv, 'quote_no', x.number);
+    if (dup) { $('#mErr').textContent = `رقم عرض السعر ${x.number} مكرر — مكتوب بالطلب #${dup.id}`; return }
     const patch = { quote_no: x.number, res_no: '', value: usd };
     if (x.customer_id) Object.assign(patch, { customer_id: x.customer_id, customer: x.customer });
     if (x.cur) modal.close();
@@ -570,6 +572,12 @@ async function save(inv, patch, rerender) {
   else renderBoard();
   if (rerender) renderDrawer();
   return true;
+}
+
+// رقم عرض السعر/الحجز مكتوب بطلب ثاني؟ (من الطلبات اللي عندنا، والقاعدة تفحص الكل عند الحفظ)
+function dupRef(inv, col, v) {
+  v = String(v ?? '').trim().toLowerCase(); if (!v) return null;
+  return S.INVOICES.find(i => i.id !== inv.id && !i.deleted_at && String(i[col] ?? '').trim().toLowerCase() === v) || null;
 }
 
 // تعديل على طلب محفوظ: ينحط بالانتظار لحد ما ينضغط "حفظ التعديلات"
@@ -761,6 +769,16 @@ export function initDrawer() {
     if (val === '' && !['quote_no', 'res_no', 'notes'].includes(col)) val = null;
     if (['value', 'transport_amt', 'ld_pct', 'points', 'credit_months', 'disc_pct', 'debt_iqd', 'debt_usd', 'bal_iqd', 'bal_usd'].includes(col)) val = val === null ? null : num(val);
     if (col === 'points' && val === null) val = 0;
+    if (col === 'quote_no' || col === 'res_no') {
+      const dup = dupRef(inv, col, val);
+      if (dup) {
+        toast(`${col === 'quote_no' ? 'رقم عرض السعر' : 'رقم الحجز'} ${String(val).trim()} مكرر — مكتوب بالطلب #${dup.id}`);
+        el.value = (col in extra.pending ? extra.pending[col] : inv[col]) ?? '';
+        el.dispatchEvent(new Event('input', { bubbles: true })); // يرجّع قفل الحقل الثاني وتلوين التعديل
+        el.focus(); el.select();
+        return;
+      }
+    }
     const patch = { [col]: val };
     // تنظيف الحقول التابعة
     if (col === 'payment' && val !== 'credit') patch.credit_months = null;
