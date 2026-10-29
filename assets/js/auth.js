@@ -4,6 +4,7 @@ import { sb, configured, loadAll, loadRoleDefs, subscribe, unsubscribe } from '.
 import { $, esc } from './util.js';
 import { paintMe, openAvatarPicker } from './avatars.js';
 import { loadNotifs, subscribeNotifs, unsubscribeNotifs, dropPush } from './notifications.js';
+import { applyViewAs } from './viewas.js';
 
 const loginEmail = u => { u = u.trim().toLowerCase(); return u.includes('@') ? u : u + LOGIN_DOMAIN };
 function authMsg(t, cls = 'bad') { $('#authMsg').innerHTML = `<div class="auth-msg ${cls}">${esc(t)}</div>` }
@@ -23,6 +24,7 @@ async function boot(onReady) {
     }
     S.ME = { ...prof, roles: prof.roles && (prof.roles.length || (prof.xroles || []).length) ? prof.roles : [prof.role] };
     await loadRoleDefs(); // التبويبات والأزرار حسب صلاحيات الأدوار
+    const viewing = await applyViewAs(sb);   // الأدمن يشوف الموقع بعين مستخدم ثاني
     $('#authView').classList.add('hidden'); $('#appView').classList.remove('hidden');
     $('#meName').textContent = S.ME.full_name || user.email;
     $('#rolePill').textContent = rolesText(S.ME.roles, S.ME.xroles);
@@ -31,6 +33,7 @@ async function boot(onReady) {
     await loadAll();
     paintMe();
     subscribe();
+    if (viewing) return;   // إشعارات الأدمن ما تخص المستخدم المعروض
     loadNotifs(); subscribeNotifs();
     if (S.ME.avatar_chosen === false) openAvatarPicker(S.ME.id, true);
   } finally { booting = false }
@@ -52,7 +55,7 @@ export function initAuth(onReady) {
     $('#authBtn').classList.remove('busy');
   };
   ['#em', '#pw'].forEach(s => $(s).addEventListener('keydown', e => { if (e.key === 'Enter') $('#authBtn').click() }));
-  $('#outBtn').onclick = async () => { await dropPush(); await sb.auth.signOut(); location.reload() };
+  $('#outBtn').onclick = async () => { try { sessionStorage.removeItem('ib_viewas') } catch (e) { } if (!S.VIEW_AS) await dropPush(); await sb.auth.signOut(); location.reload() };
 
   // INITIAL_SESSION يغني عن getSession؛ TOKEN_REFRESHED ما يحتاج إعادة تحميل
   sb.auth.onAuthStateChange((e, session) => {

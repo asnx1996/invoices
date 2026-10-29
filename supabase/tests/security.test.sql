@@ -817,6 +817,47 @@ begin
   perform pg_temp.as_owner();
   update public.profiles set xroles = '{}' where id = u_rep2;
 
+  -- ---------------- 025: صلاحيات لكل حساب ----------------
+  perform pg_temp.as_user(u_admin);
+  perform pg_temp.t_ok('حساب: الأدمن ينطي المحاسب صلاحية خاصة', format('update public.profiles set xperms = ''{trash}'' where id = %L', u_acc), 1);
+  perform pg_temp.t_denied('حساب: صلاحية غير معروفة تترفض', format('update public.profiles set xperms = ''{xyz}'' where id = %L', u_acc));
+  perform pg_temp.as_owner();
+  perform pg_temp.t_eq('حساب: المحاسب صار عنده الحذف', format('select public.user_perm(%L, ''trash'')::text', u_acc), 'true');
+  perform pg_temp.as_user(u_admin);
+  perform pg_temp.t_ok('حساب: ونشيل منه يشوف الكل', format('update public.profiles set nperms = ''{see_all}'' where id = %L', u_acc), 1);
+  perform pg_temp.as_owner();
+  perform pg_temp.t_eq('حساب: ما يشوف الكل', format('select public.user_perm(%L, ''see_all'')::text', u_acc), 'false');
+  perform pg_temp.t_eq('حساب: باقي صلاحيات دوره', format('select public.user_perm(%L, ''acc'')::text', u_acc), 'true');
+  perform pg_temp.as_user(u_acc);
+  perform pg_temp.t_denied('حساب: ما يغير صلاحياته', format('update public.profiles set nperms = ''{}'' where id = %L', u_acc));
+  perform pg_temp.as_owner();
+  update public.profiles set xperms = '{}', nperms = '{}' where id = u_acc;
+
+  -- ---------------- 025: حد يومي للطارئ ----------------
+  update public.invoices set urgent_by = null, urgent_at = null;  -- اللي انأشر بالاختبارات اللي فوق
+  insert into public.app_settings (key, value) values ('urgent_daily', '1') on conflict (key) do update set value = '1';
+  insert into public.invoices (rep_id, customer_id, quote_no, value) values (u_rep1, c1, 'Q-u1', 100) returning id into i_st1;
+  insert into public.invoices (rep_id, customer_id, quote_no, value) values (u_rep1, c1, 'Q-u2', 100) returning id into i_st2;
+  perform pg_temp.as_user(u_rep1);
+  perform pg_temp.t_eq('طارئ: باقي 1', 'select public.urgent_left()::text', '1');
+  perform pg_temp.t_ok('طارئ: الأول ينقبل', format('select public.inv_set_urgent(%s, true)', i_st1));
+  perform pg_temp.t_denied('طارئ: الثاني يترفض بالحد', format('select public.inv_set_urgent(%s, true)', i_st2));
+  perform pg_temp.t_ok('طارئ: يشيله', format('select public.inv_set_urgent(%s, false)', i_st1));
+  perform pg_temp.t_eq('طارئ: الشيل ما يرجّع الحد', 'select public.urgent_left()::text', '0');
+  perform pg_temp.t_ok('طارئ: نفس الطلب يرجع يتأشر', format('select public.inv_set_urgent(%s, true)', i_st1));
+  perform pg_temp.as_user(u_admin);
+  perform pg_temp.t_eq('طارئ: الأدمن بلا حد', 'select coalesce(public.urgent_left()::text, ''none'')', 'none');
+  perform pg_temp.as_owner();
+  delete from public.app_settings where key = 'urgent_daily';
+
+  -- ---------------- 025: آخر خصم للزبون ----------------
+  update public.invoices set disc_req = true, disc_pct = 4 where id = i_st1;
+  update public.invoices set ld = true, ld_pct = 2.5 where id = i_st2;
+  perform pg_temp.as_user(u_rep2);
+  perform pg_temp.t_eq('آخر خصم: يطلع حتى من طلب مندوب ثاني', format('select pct::text from public.cust_last_disc(%s) where kind = ''disc''', c1), '4');
+  perform pg_temp.t_eq('آخر خصم: والخصم اللاحق', format('select pct::text from public.cust_last_disc(%s) where kind = ''ld''', c1), '2.5');
+  perform pg_temp.t_eq('آخر خصم: بدون نفس الطلب', format('select count(*)::text from public.cust_last_disc(%s, %s) where kind = ''disc''', c1, i_st1), '0');
+
   -- ---------------- النتيجة ----------------
   perform pg_temp.as_owner();
   msg := current_setting('tst.fail', true);

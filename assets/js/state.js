@@ -127,8 +127,10 @@ S.REQX = new Set();
 export const isReq = k => REQ_FIELDS[k] && REQ_FIELDS[k][2] === 'in' ? S.REQX.has(k) : !S.OPT.has(k);
 
 const roleKeys = p => [...(p.roles || []), ...(p.xroles || [])];
-// صلاحية من الأدوار بس (بدون استثناء الأدمن): منو "مندوب" مثلاً
-export const roleHas = (p, perm) => !!p && S.ROLEDEFS.some(d => roleKeys(p).includes(d.key) && d.perms.includes(perm));
+// صلاحية من الأدوار وحدها، بدون الخاصة بالحساب (حتى صفحة المستخدمين تعرف شنو اللي تغيّر)
+export const fromRoles = (p, perm) => !!p && S.ROLEDEFS.some(d => roleKeys(p).includes(d.key) && d.perms.includes(perm));
+// صلاحية المستخدم بدون استثناء الأدمن: أدواره + المضافة لحسابه − المشالة منه (025). منو "مندوب" مثلاً
+export const roleHas = (p, perm) => !!p && !(p.nperms || []).includes(perm) && ((p.xperms || []).includes(perm) || fromRoles(p, perm));
 export const userHas = (p, perm) => !!p && ((p.roles || []).includes('admin') || roleHas(p, perm));
 export const hasPerm = perm => userHas(S.ME, perm);
 export const roleName = k => k === 'admin' ? ROLES.admin : (S.ROLEDEFS.find(d => d.key === k) || {}).name || ROLES[k] || k;

@@ -1,12 +1,13 @@
 // صفحة الإعدادات: قائمة أقسام على الجنب وكل قسم بمكانه
 //   عام (العملة، سعر الصرف، النسخة الاحتياطية) · المستخدمين · الأدوار والصلاحيات · البوردات · مراحل الطلب · الحقول الإلزامية
 // صاحب صلاحية "إدارة المستخدمين" (مو أدمن) يشوف قسم المستخدمين بس
-import { S, ROLES, PERMS, PERM_GROUPS, REQ_FIELDS, COLS, rolesText, roleName, hasRole, isReq, changed, stepInfo, isBuiltinStep } from './state.js';
+import { S, ROLES, PERMS, PERM_GROUPS, REQ_FIELDS, COLS, rolesText, roleName, hasRole, isReq, changed, stepInfo, isBuiltinStep, roleHas, fromRoles } from './state.js';
 import { sb, rpc, loadProfiles, loadBoards, loadRoleDefs, saveSetting, loadStageCounts } from './api.js';
 import { $, esc, ic, ask, toast, genPw, cur, setCurrency, rate, setRate, num } from './util.js';
 import { can } from './can.js';
 import { backupNow } from './backup.js';
 import { avatarHTML, openAvatarPicker } from './avatars.js';
+import { startViewAs } from './viewas.js';
 
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d } catch (e) { return d } };
 const keep = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch (e) { } };
@@ -96,6 +97,8 @@ function generalHTML() {
         <button class="btn primary sm" id="setCurBtn">حفظ</button>`)}
       ${row('سعر صرف الدولار', 'بالدينار. إذا المندوب كتب القيمة بالدينار تنقسم عليه وتنحفظ بالدولار', `<input type="text" id="setRate" inputmode="decimal" autocomplete="off" dir="ltr" value="${esc(rate())}" aria-label="سعر صرف الدولار">
         <button class="btn primary sm" id="setRateBtn">حفظ</button>`)}
+      ${row('حد الطارئ اليومي', 'كم طلب يكدر كل مستخدم يأشره طارئ باليوم. فارغ أو 0 = بلا حد. الأدمن ما ينحسب عليه', `<input type="text" id="setUrg" inputmode="numeric" autocomplete="off" dir="ltr" value="${S.URGENT_DAILY || ''}" placeholder="بلا حد" aria-label="حد الطارئ اليومي">
+        <button class="btn primary sm" id="setUrgBtn">حفظ</button>`)}
     </div>
     <div class="set-card">${row('نسخة احتياطية', 'كل الجداول بملف Excel ينحفظ على جهازك', `<button class="btn sm" id="backupBtn">${ic('download')}نسخة احتياطية الآن</button>`)}</div>`;
 }
@@ -127,7 +130,9 @@ function userHTML(u) {
   const lock = !admin() && (isAdm || me);   // غير الأدمن ما يلمس الأدمن ولا يغير أدواره هو
   const open = openUser === u.id, boards = S.BOARDS || [];
   const myBoards = boards.filter(b => S.MEMBERS.some(m => m.board_id === b.id && m.user_id === u.id));
-  const chips = keys.map(k => `<span class="u-chip${k === 'admin' ? ' adm' : ''}">${esc(roleName(k))}</span>`).join('');
+  const own = isAdm ? 0 : (u.xperms || []).length + (u.nperms || []).length;
+  const chips = keys.map(k => `<span class="u-chip${k === 'admin' ? ' adm' : ''}">${esc(roleName(k))}</span>`).join('')
+    + (own ? `<span class="u-chip own" title="صلاحيات خاصة بهذا الحساب">+${own} خاصة</span>` : '');
   const sum = `<button type="button" class="u-sum" data-uopen="${esc(u.id)}" aria-expanded="${open}" aria-controls="ud-${esc(u.id)}">
       ${avatarHTML(u, 38)}
       <span class="u-id"><b>${esc(u.full_name) || '<span class="help">بدون اسم</span>'}${me ? ' <span class="u-me">أنت</span>' : ''}</b><span class="u-login" dir="ltr">${esc(LOGINS[u.id] || '—')}</span></span>
@@ -143,14 +148,47 @@ function userHTML(u) {
         `<label class="role-chk"><input type="checkbox" data-urole="${esc(u.id)}" value="${esc(k)}" ${keys.includes(k) ? 'checked' : ''} ${lock || (me && k === 'admin') ? 'disabled' : ''}>${esc(v)}</label>`).join('')}</div></div>
       ${boards.length ? `<div class="u-blk"><div class="u-lbl">البوردات</div>${isAdm ? '<span class="help">الأدمن يشوف كل البوردات</span>' : `<div class="roles">${boards.map(b =>
         `<label class="role-chk"><input type="checkbox" data-ubrd="${esc(u.id)}" value="${b.id}" ${myBoards.includes(b) ? 'checked' : ''} ${lock ? 'disabled' : ''}>${esc(b.name)}</label>`).join('')}</div>`}</div>` : ''}
+      ${userPermsHTML(u, lock)}
       <div class="u-blk u-acts">
         <label class="sw-l">${sw(`data-uact="${esc(u.id)}"`, u.active, 'الحساب فعّال', me || lock)}<span>${u.active ? 'الحساب فعّال' : 'الحساب موقوف'}</span></label>
         <span class="spacer"></span>
         ${lock && !me ? '' : `<button class="btn sm" data-uav="${esc(u.id)}">${ic('image')}الصورة</button>`}
+        ${admin() && !me && u.active ? `<button class="btn sm" data-uview="${esc(u.id)}" title="افتح الموقع مثل ما يشوفه هذا الشخص — للعرض بس">${ic('users')}شوف كأنه</button>` : ''}
         ${admin() ? `<button class="btn sm" data-uname="${esc(u.id)}">${ic('edit')}الاسم</button>` : ''}
         ${lock && !me ? '' : `<button class="btn sm" data-upw="${esc(u.id)}">${ic('key')}تغيير الرمز</button>`}
       </div>
     </div></div>`;
+}
+
+// صلاحيات خاصة بهذا الحساب (025): المفتاح يبين الصلاحية الفعلية، واللي تختلف عن أدواره تتعلّم "خاصة"
+// ترجيعها مثل الدور يمسح الاستثناء. الأدمن عنده كلشي فما إله هذا القسم
+let permsOpen = null;
+function userPermsHTML(u, lock) {
+  if (!S.HAS_ROLEDEFS || (u.roles || []).includes('admin') || !('xperms' in u)) return '';
+  const own = [...u.xperms, ...u.nperms].length;
+  const rows = PERM_GROUPS.map(g => `<div class="up-g">${g[0]}</div>` + permRows(g).map(([p, t]) => {
+    const base = fromRoles(u, p), on = roleHas(u, p), x = on !== base;
+    return `<div class="up-row${x ? ' own' : ''}"><span class="up-t">${esc(t)}${x ? `<span class="u-chip ${on ? 'add' : 'del'}">${on ? 'مضافة لحسابه' : 'مشالة من حسابه'}</span>` : ''}</span>
+      ${sw(`data-uperm="${esc(u.id)}" value="${esc(p)}"`, on, u.full_name + ': ' + t, lock)}</div>`;
+  }).join('')).join('');
+  return `<details class="u-blk up" data-upopen="${esc(u.id)}" ${permsOpen === u.id ? 'open' : ''}>
+    <summary class="u-lbl">صلاحيات هذا الحساب <span class="help">${own ? own + ' خاصة بيه · ' : ''}فوگ صلاحيات أدواره</span></summary>
+    <p class="help" style="margin:6px 0 4px">شغّل أو طفّي أي صلاحية لهذا الشخص بس، بدون ما تغير الدور على الباقين.</p>${rows}</details>`;
+}
+
+async function toggleUserPerm(t) {
+  const u = S.PROFILES.find(p => p.id === t.dataset.uperm); if (!u) return;
+  const p = t.value, want = t.checked;
+  let xp = u.xperms.filter(x => x !== p), np = u.nperms.filter(x => x !== p);
+  if (want !== fromRoles(u, p)) (want ? xp : np).push(p);
+  // نفس قواعد الأدوار: مرحلة إضافية تحتاج تشوف طلبات القرار، وطلبات كل المندوبين تحتاج تشوف الكل
+  const need = want && /^s_/.test(p) && !roleHas(u, 'see_all') && !roleHas(u, 'see_late') ? 'see_late' : want && p === 'rep_all' && !roleHas(u, 'see_all') ? 'see_all' : null;
+  if (need) { np = np.filter(x => x !== need); if (!fromRoles(u, need)) xp.push(need) }
+  const { error } = await sb.from('profiles').update({ xperms: xp, nperms: np }).eq('id', u.id);
+  if (error) { t.checked = !want; return toast(error.message) }
+  u.xperms = xp; u.nperms = np; changed();
+  toast(`${u.full_name}: ${want ? 'انضافت' : 'انشالت'} "${permTitle(p)}"${need ? ' + ' + permTitle(need) : ''}`);
+  paint();
 }
 
 // ---------------------------------------------------------------- الأدوار والصلاحيات
@@ -413,12 +451,19 @@ export function initSettings() {
       if (!await saveSetting('usd_rate', String(v))) return;
       setRate(v); changed(); return toast('صار سعر الصرف: ' + v);
     }
+    if (t.id === 'setUrgBtn') {
+      const s = $('#setUrg').value.trim(), v = s === '' ? 0 : num(s);
+      if (!Number.isInteger(v) || v < 0 || v > 9999) return toast('اكتب رقم صحيح، مثل 3');
+      if (!await saveSetting('urgent_daily', String(v))) return;
+      S.URGENT_DAILY = v; return toast(v ? `صار الحد: ${v} طلب طارئ باليوم لكل مستخدم` : 'انشال حد الطارئ');
+    }
     if (t.id === 'backupBtn') return backupNow();
     // المستخدمين
     if (t.id === 'addUserBtn') return addUser();
     if (d.uopen) { openUser = openUser === d.uopen ? null : d.uopen; paint(); const b = $(`[data-uopen="${CSS.escape(d.uopen)}"]`); b && b.focus({ preventScroll: true }); return }
     if ('urf' in d) { uRole = d.urf; return paint() }
     if (d.uav) return openAvatarPicker(d.uav);
+    if (d.uview) return startViewAs(d.uview);
     if (d.uname) {
       const u = S.PROFILES.find(p => p.id === d.uname) || {};
       return ask('تغيير الاسم', [{ id: 'n', label: 'الاسم الكامل', type: 'text', req: true, value: u.full_name || '' }], async v => {
@@ -506,10 +551,13 @@ export function initSettings() {
     }
   });
 
+  m.addEventListener('toggle', e => { const id = e.target.dataset && e.target.dataset.upopen; if (id) permsOpen = e.target.open ? id : permsOpen === id ? null : permsOpen }, true);
+
   m.addEventListener('change', async e => {
     const t = e.target, d = t.dataset;
     if (t.id === 'uOff') { showOff = t.checked; return paint() }
     if (d.rperm) return togglePerm(t);
+    if (d.uperm) return toggleUserPerm(t);
     if (d.son) {
       const k = d.son, s = stepInfo(k), n = COUNTS[k] || 0, on = t.checked;
       const list = S.STEPS.map(x => x.k === k ? { ...x, on } : x);

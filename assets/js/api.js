@@ -3,6 +3,7 @@ import { S, changed, hasRole, hasPerm, getBoard, DEFAULT_ROLE_DEFS, DEFAULT_STEP
 import { toast, DAY, setCurrency, setRate } from './util.js';
 
 import { createLocalClient } from './local-client.js';
+import { seenBy } from './viewas.js';
 
 // النسخة المحلية (برنامج الحاسبة): السيرفر يعرّف window.__LOCAL_API__ وكلشي يروح له بدل Supabase
 export const LOCAL = !!window.__LOCAL_API__;
@@ -33,8 +34,11 @@ const invoiceQuery = () => {
   return q;
 };
 
+// وضع "شوف كأنه": الأدمن يجيب كلشي، فنخلي بس اللي يطلع للمستخدم المعروض
+const viewable = inv => !S.VIEW_AS || seenBy(S.ME, inv);
+
 export async function loadInvoices() {
-  try { S.INVOICES = await fetchAll(invoiceQuery) } catch (e) { toast(e.message) }
+  try { S.INVOICES = (await fetchAll(invoiceQuery)).filter(viewable) } catch (e) { toast(e.message) }
   S.loaded = true;
   await loadProfits();
   changed();
@@ -73,6 +77,7 @@ export async function loadSettings() {
   const list = v => new Set(String(v || '').split(',').map(x => x.trim()).filter(Boolean));
   S.OPT = list(m.opt_fields);
   S.REQX = list(m.req_fields);
+  S.URGENT_DAILY = +m.urgent_daily || 0;   // حد الطارئ اليومي (025)، 0 = بلا حد
   // مراحل القرار (022): الإعداد ما ينحفظ إلا بعد ما تتشغل، فبدونه نبقى على المدير ← الزبون ← المخزن
   let st = null; try { st = JSON.parse(m.stages || 'null') } catch (e) { }
   S.STEPS = Array.isArray(st) && st.length ? st : DEFAULT_STEPS;
@@ -107,6 +112,7 @@ export async function loadBoards() {
   S.boardsLoaded = true;
   if (b.error) { S.BOARDS = null; S.MEMBERS = []; S.board = null; return }
   S.BOARDS = b.data || []; S.MEMBERS = m.data || [];
+  if (S.VIEW_AS && !S.ME.roles.includes('admin')) S.BOARDS = S.BOARDS.filter(x => S.MEMBERS.some(y => y.board_id === x.id && y.user_id === S.ME.id));
   loadBoardStats();
   let saved = null; try { saved = +localStorage.getItem('ib_board') } catch (e) { }
   S.board = (S.BOARDS.find(x => x.id === saved) || S.BOARDS[0] || {}).id ?? null;
@@ -153,6 +159,7 @@ export async function loadAll() {
 export async function refreshInvoice(id) {
   let { data } = await sb.from('invoices').select('*').eq('id', id).maybeSingle();
   if (data && S.board && data.board_id !== S.board) data = null;  // انتقل لبورد ثاني
+  if (data && !viewable(data)) data = null;
   const i = S.INVOICES.findIndex(x => x.id === id);
   if (data) { if (i >= 0) S.INVOICES[i] = data; else S.INVOICES.push(data) }
   else if (i >= 0) S.INVOICES.splice(i, 1);

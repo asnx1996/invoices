@@ -314,6 +314,17 @@ details.more[open]>summary::after{transform:rotate(-135deg)}
 details.more>:not(summary){margin-inline:12px}
 details.more .steps{margin-block:4px 14px}
 details.more .timeline{padding-block:4px 6px}
+/* أقسام درج الطلب: عنوان + ملخص صغير، وتنفتح بالسهم */
+details.sec>summary{color:var(--text);font-size:15px}
+details.sec>summary .sec-t{flex:none}
+details.sec>summary .sec-note{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:500;color:var(--muted);font-variant-numeric:tabular-nums}
+details.sec>summary .lock{flex:none}
+details.sec>.sec-body{padding-block:2px 14px}
+.last-disc{display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;margin-top:8px;font-size:13px;color:var(--muted)}
+.last-disc svg.i{width:14px;height:14px;flex:none}
+.last-disc>span{flex:1;min-width:0}
+.last-disc b{color:var(--text);font-variant-numeric:tabular-nums}
+details.sec[open]>summary{border-bottom-left-radius:0;border-bottom-right-radius:0}
 
 /* Users */
 .page{padding:18px;max-width:900px}
@@ -904,6 +915,20 @@ body.has-stars .d-tile.ink{box-shadow:0 0 0 1px rgba(255,255,255,.09),0 1px 3px 
 .u-chips{display:flex;gap:4px;flex-wrap:wrap;flex:1;min-width:0}
 .u-chip{font-size:12px;font-weight:500;padding:2px 9px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);color:var(--muted);white-space:nowrap}
 .u-chip.adm{background:var(--vio-soft);color:var(--vio);border-color:transparent}
+/* شريط "شوف كأنه" */
+.viewas-bar{position:sticky;top:0;z-index:60;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px 12px;padding:8px 16px;background:var(--warn-soft);color:var(--warn);border-bottom:1px solid var(--warn);font-size:14px;text-align:center}
+.viewas-bar b{color:var(--text)}
+.u-chip.own{background:var(--primary-soft);color:var(--primary);border-color:transparent}
+.u-chip.add{background:var(--ok-soft);color:var(--ok);border-color:transparent}
+.u-chip.del{background:var(--bad-soft);color:var(--bad);border-color:transparent}
+/* صلاحيات الحساب */
+details.up>summary{cursor:pointer;display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:32px}
+details.up>summary .help{font-weight:400}
+.up-g{margin-top:10px;font-size:12.5px;font-weight:600;color:var(--muted)}
+.up-row{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)}
+.up-row:last-child{border-bottom:0}
+.up-t{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:14px;min-width:0}
+.up-t .u-chip{font-size:11px;padding:1px 7px}
 .u-brd{max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .u-st{font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;flex:none}
 .u-st.on{background:var(--ok-soft);color:var(--ok)}

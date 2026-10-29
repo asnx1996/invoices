@@ -11,7 +11,15 @@ import { highlightMentions } from './mentions.js';
 // pending: تعديلات مكتوبة بالدرج وما انحفظت بعد (تنحفظ بزر "حفظ التعديلات")
 let extra = { comments: [], log: [], pdfUrl: null, costEdit: false, pending: {}, pendingCost: null, valCur: null, iqd: null, manualQuote: false };
 let returnFocus = null;
-const shown = { steps: false, log: false }; // الأقسام المطوية تبقى مثل ما تركها المستخدم
+// الأقسام المطوية تبقى مثل ما تركها المستخدم (حتى بعد ما يسكّر الموقع)
+let shown = {};
+try { shown = JSON.parse(localStorage.getItem('ib_secs') || '{}') || {} } catch (e) { }
+// قسم ينطوي بسهم. إذا المستخدم ما لمسه، ينفتح القسم اللي يخص مرحلة الطلب بس (open)
+function sec(k, title, body, { note = '', lock = '', open = false, force = false } = {}) {
+  const o = force || (k in shown ? shown[k] : open);
+  return `<details class="more sec" data-more="${k}" ${o ? 'open' : ''}><summary><span class="sec-t">${title}</span>${note ? `<span class="sec-note">${note}</span>` : ''}${lock}</summary><div class="sec-body">${body}</div></details>`;
+}
+const lockTag = t => `<span class="lock">${ic('lock')}${t}</span>`;
 
 export async function openDrawer(id, push = true) {
   const wasOpen = !!S.drawerId;
@@ -32,7 +40,7 @@ export async function openDrawer(id, push = true) {
     d.querySelector('.close').focus({ preventScroll: true });
   }
   if (id === 'draft') return;
-  const [c, l] = await Promise.all([loadComments(id), sb.from('invoice_log').select('*').eq('invoice_id', id).order('at')]);
+  const [c, l] = await Promise.all([loadComments(id), sb.from('invoice_log').select('*').eq('invoice_id', id).order('at'), loadUrgLeft()]);
   extra.comments = c; extra.log = l.data || [];
   const inv = getInv(id);
   if (inv && inv.pdf_path) { const { data } = await sb.storage.from('invoices').createSignedUrl(inv.pdf_path, 3600); extra.pdfUrl = data && data.signedUrl }
@@ -48,10 +56,20 @@ async function loadComments(id) {
   return list;
 }
 
+// كم طلب باقي يتأشر طارئ اليوم (025). null = بلا حد أو القاعدة قبل 025
+let urgLeft = null;
+// بداية اليوم بتوقيت بغداد (UTC+3 بلا توقيت صيفي) — نفس day_start بالقاعدة
+const BGD = 3 * 3600e3;
+const todayStart = () => new Date(Math.floor((Date.now() + BGD) / 864e5) * 864e5 - BGD);
+async function loadUrgLeft() {
+  const { data, error } = await sb.rpc('urgent_left');
+  urgLeft = error ? null : data;
+}
+
 // بعد أي إجراء: التعليقات والسجل ممكن تغيّرت (سبب الإرجاع/النقل ينكتب تعليق)
 export async function reloadActivity(id) {
   if (S.drawerId !== id) return;
-  const [c, l] = await Promise.all([loadComments(id), sb.from('invoice_log').select('*').eq('invoice_id', id).order('at')]);
+  const [c, l] = await Promise.all([loadComments(id), sb.from('invoice_log').select('*').eq('invoice_id', id).order('at'), loadUrgLeft()]);
   if (S.drawerId !== id) return;
   extra.comments = c; extra.log = l.data || [];
   renderDrawer();
@@ -188,7 +206,11 @@ function actionsHTML(inv) {
     btn('custAccept', 'الزبون موافق', 'ok', 'check'), btn('custRefuse', 'الزبون رفض', 'bad', 'x'),
     btn('complete', 'تحويل لمبيعات + رقم المبيعات', 'ok', 'check'),
     inv.stage === 'decision' ? btn('stepPass', 'تم: ' + esc(stepInfo(inv.sub).t), 'ok', 'check') : '', btn('stepBack', 'إرجاع للحسابات', 'bad', 'back')].join('');
-  const small = [btn('move', 'نقل لمرحلة ثانية', 'sm', 'board'), btn('setBoard', 'نقل لبورد ثاني', 'sm', 'board'), can('toggleUrgent', inv) ? `<button class="btn sm ${inv.urgent ? '' : 'bad'}" data-act="toggleUrgent" aria-pressed="${!!inv.urgent}">${ic('flame')}${inv.urgent ? 'شيل علامة طارئ' : 'طارئ'}</button>` : '', btn('requestDelete', 'طلب حذف', 'bad sm', 'trash'), inv.delete_req_at ? '' : btn('delete', 'حذف', 'bad sm', 'trash')].join('');
+  // الحد اليومي: نفس الطلب اليوم ما ينحسب مرتين (025)
+  const urgFree = inv.urgent_by === S.ME.id && inv.urgent_at && new Date(inv.urgent_at) >= todayStart();
+  const urgOut = !inv.urgent && urgLeft === 0 && !urgFree;
+  const urgTxt = inv.urgent ? 'شيل علامة طارئ' : urgLeft == null || urgFree ? 'طارئ' : `طارئ (باقي ${urgLeft} اليوم)`;
+  const small = [btn('move', 'نقل لمرحلة ثانية', 'sm', 'board'), btn('setBoard', 'نقل لبورد ثاني', 'sm', 'board'), can('toggleUrgent', inv) ? `<button class="btn sm ${inv.urgent ? '' : 'bad'}" data-act="toggleUrgent" aria-pressed="${!!inv.urgent}" ${urgOut ? 'disabled title="وصلت الحد اليومي للطلبات الطارئة"' : ''}>${ic('flame')}${urgOut ? 'خلص حد الطارئ اليوم' : urgTxt}</button>` : '', btn('requestDelete', 'طلب حذف', 'bad sm', 'trash'), inv.delete_req_at ? '' : btn('delete', 'حذف', 'bad sm', 'trash')].join('');
   let wait;
   if (inv.stage === 'done') wait = inv.sales_no ? `تمت برقم مبيعات <b>${esc(inv.sales_no)}</b> — ${dOnly(inv.closed_at)}` : `تمت — ${dOnly(inv.closed_at)}`;
   else if (inv.stage === 'cancel') wait = `ملغاة: ${esc(inv.cancel_reason)}`;
@@ -221,7 +243,10 @@ function termsHTML(inv) {
   const payOpts = { ...PAY, ...(PAY_LEGACY[inv.payment] ? { [inv.payment]: PAY_LEGACY[inv.payment] } : {}) };
   const payerOpts = { ...PAYER, ...(PAYER_LEGACY[inv.payer] ? { [inv.payer]: PAYER_LEGACY[inv.payer] } : {}) };
   const tr = transportAdded(inv);
-  return `<section class="blk"><h4>السداد والنقل ${et ? `<span class="lock">${ic('lock')}يعدلها المحاسب</span>` : ''}</h4>
+  const note = [inv.payment ? (PAY[inv.payment] || PAY_LEGACY[inv.payment]) + (inv.payment === 'credit' && inv.credit_months ? ' ' + (MONTHS[inv.credit_months] || '') : '') : '',
+    inv.payer ? 'نقل ' + (PAYER[inv.payer] || PAYER_LEGACY[inv.payer]) : ''].filter(Boolean).join(' · ');
+  const miss = S.lastMissing && S.lastMissing.id === inv.id;
+  return sec('terms', 'السداد والنقل', `
     <div class="grid">
       ${fld('طريقة السداد', 'payment', inv.payment, { opts: payOpts, req: isReq('payment'), dis: et, rer: true })}
       ${inv.payment === 'credit' ? fld('مدة الآجل', 'credit_months', inv.credit_months, { opts: MONTHS, req: true, dis: et, rer: true }) : '<div></div>'}
@@ -230,12 +255,12 @@ function termsHTML(inv) {
       <div class="fld full"><div class="help">الإجمالي بعد النقل: <b>${money(totalAfterTransport(inv))}</b>${tr ? ` (${money(inv.value)} + ${money(tr)})` : ''}</div></div>
       ${fld('عدد النقاط', 'points', inv.points, { type: 'number', dis: et, rer: true, help: `نسبة النقاط: ${fmt(pointsPct(inv))}% (النقطة = ${POINT_RATE}%)` })}
       ${costFld(inv)}
-      <div class="term-box">${tog('خصم لاحق', 'ld', inv.ld, et)}
+      <div class="term-box">${tog('خصم لاحق', 'ld', inv.ld, et)}${lastDiscHTML(inv, 'ld', et)}
         ${inv.ld ? `<div class="grid">${fld('نسبة الخصم %', 'ld_pct', inv.ld_pct, { type: 'number', req: true, dis: et, rer: true })}
           <div class="fld"><div class="help" style="margin-top:28px">مبلغ الخصم: <b>${money(ldAmount(inv))}</b></div></div></div>` : ''}</div>
       ${changesHTML(inv)}
-    </div></section>
-    ${custStateHTML(inv, et)}`;
+    </div>`, { note, lock: et ? lockTag('يعدلها المحاسب') : '', open: inv.stage === 'acc', force: miss })
+    + custStateHTML(inv, et, miss);
 }
 
 // شنو تغيّر على الطلب عند المدير: من أول ما وصل للمدير (أول "أرسل الطلب للقرار" بعد آخر إرسال للحسابات)
@@ -319,18 +344,19 @@ const BAL_CUR = { iqd: 'دينار', usd: 'دولار', both: 'دينار ودو
 const amounts = (p, pre, inv, req, dis) => { const c = inv[p + '_cur'];
   return (c === 'iqd' || c === 'both' ? fld(`${pre} بالدينار (د.ع)`, p + '_iqd', inv[p + '_iqd'], { type: 'number', req, dis, rer: true }) : '')
     + (c === 'usd' || c === 'both' ? fld(`${pre} بالدولار ($)`, p + '_usd', inv[p + '_usd'], { type: 'number', req, dis, rer: true }) : '') };
-function custStateHTML(inv, dis) {
+function custStateHTML(inv, dis, force) {
   if (!('debt_cur' in inv)) return ''; // قبل ما تتشغل 021
   const rq = isReq('cust'), d = inv.cust_debt, chg = pendingHas('cust_debt');
   const yn = [[true, 'نعم'], [false, 'لا']].map(([v, t]) => `<label class="chk"><input type="radio" name="cust_debt" data-f="cust_debt" data-rer="1" value="${v}" ${d === v ? 'checked' : ''} ${dis ? 'disabled' : ''}> ${t}</label>`).join('');
-  return `<section class="blk"><h4>حالة الزبون ${dis ? `<span class="lock">${ic('lock')}يعدلها المحاسب</span>` : ''}</h4>
+  const note = d == null ? '' : d ? 'عليه دين: ' + amtText(inv, 'debt') : 'ما عليه دين';
+  return sec('cust', 'حالة الزبون', `
     <div class="grid">
       <div class="fld full${chg ? ' chg' : ''}"><label>هل على الزبون دين؟${rq ? ' <span class="req">*</span>' : ''}</label>
         <div role="radiogroup" aria-label="هل على الزبون دين" style="display:flex;gap:8px;flex-wrap:wrap">${yn}</div>${chg ? `<div class="was">${ic('back')}قبل: <b>${esc(wasDebt())}</b></div>` : ''}</div>
       ${d ? `<div class="term-box"><div class="grid">${fld('عملة الدين', 'debt_cur', inv.debt_cur, { opts: BAL_CUR, req: true, dis, rer: true })}<div></div>${amounts('debt', 'الدين', inv, true, dis)}</div></div>` : ''}
       <div class="term-box"><div class="help" style="font-weight:600;margin-bottom:6px">رصيد الزبون</div><div class="grid">
         ${fld('عملة الرصيد', 'bal_cur', inv.bal_cur, { opts: BAL_CUR, req: rq, dis, rer: true })}<div></div>${amounts('bal', 'الرصيد', inv, rq, dis)}</div></div>
-    </div></section>`;
+    </div>`, { note: esc(note), lock: dis ? lockTag('يعدلها المحاسب') : '', open: inv.stage === 'acc', force });
 }
 const wasDebt = () => { const v = (getInv(S.drawerId) || {}).cust_debt; return v == null ? 'ما انجاوب' : v ? 'نعم' : 'لا' };
 
@@ -339,7 +365,8 @@ function profitHTML(inv) {
   if (!can('seeProfit', inv)) return '';
   const real = getInv(inv.id), p = S.PROFITS[inv.id];
   const costNow = extra.pendingCost ?? (hasRole('admin') ? S.COSTS[inv.id] : null);
-  if (!p && costNow == null) return `<section class="blk"><h4>الربح</h4><div class="help">${inv.cost_set ? 'جاري الحساب...' : 'ما انكتب سعر الكلفة بعد'}</div></section>`;
+  const lock = lockTag('للأدمن والمدير'), open = inv.stage === 'decision';
+  if (!p && costNow == null) return sec('profit', 'الربح', `<div class="help">${inv.cost_set ? 'جاري الحساب...' : 'ما انكتب سعر الكلفة بعد'}</div>`, { lock, open });
   // الكلفة: الأدمن يعرفها، والمدير نطلعها من الربح والإجمالي المحفوظين
   const cost = costNow != null ? num(costNow) : num(p.total) * (1 - num(p.gross_pct) / 100);
   const calc = x => {
@@ -354,7 +381,7 @@ function profitHTML(inv) {
     const ch = preview && before && Math.abs(now[k] - before[k]) > 0.005;
     return `<tr class="${cls}${ch ? ' chg' : ''}"><td>${label}</td><td>${ch ? `<s class="old">${f(before[k])}</s> ` : ''}<span class="${k === 'net' ? (now.net >= 0 ? 'pos' : 'neg') : ''}">${f(now[k])}</span></td></tr>`;
   };
-  return `<section class="blk"><h4>الربح <span class="lock">${ic('lock')}للأدمن والمدير</span></h4>
+  return sec('profit', 'الربح', `
     ${preview ? `<div class="preview-note">${ic('clock')}معاينة — هذي النتيجة بعد حفظ التعديلات</div>` : ''}
     <div class="profit${preview ? ' previewing' : ''}"><table>
       ${row('الإجمالي بعد النقل', 'total', money)}
@@ -364,13 +391,33 @@ function profitHTML(inv) {
       ${row('− طلب خصم المندوب', 'disc', pct)}
       ${row(`− النقاط (${fmt(inv.points)} × ${POINT_RATE})`, 'pts', pct)}
       ${row('<b>صافي الربح</b>', 'net', pct, 'net')}
-    </table></div></section>`;
+    </table></div>`, { note: 'صافي ' + pct(now.net), lock, open: open || preview });
+}
+
+// آخر خصم انعطى لنفس الزبون (025) — من كل الطلبات حتى اللي ما يشوفها المستخدم. ينجاب مرة لكل زبون
+const lastDisc = {};
+function lastDiscHTML(inv, kind, dis) {
+  if (!inv.customer_id) return '';
+  const key = inv.customer_id + ':' + inv.id, c = lastDisc[key];
+  if (c === undefined) { loadLastDisc(inv.customer_id, inv.id, key); return '' }
+  if (!c || c === 'wait') return '';   // قبل 025، أو لسه يتحمل
+  const name = kind === 'ld' ? 'خصم لاحق' : 'خصم', x = c[kind];
+  if (!x) return `<div class="last-disc help">${ic('clock')}ما انعطى ${name} لهذا الزبون قبل</div>`;
+  const now = kind === 'ld' ? (inv.ld ? num(inv.ld_pct) : 0) : discPct(inv);
+  return `<div class="last-disc">${ic('clock')}<span>آخر ${name} لهذا الزبون: <b>${fmt(x.pct)}%</b> · طلب #${x.invoice_id} · ${dOnly(x.at)}</span>
+    ${!dis && num(x.pct) !== now ? `<button type="button" class="btn sm" data-lastdisc="${kind}" data-pct="${esc(x.pct)}">استخدم ${fmt(x.pct)}%</button>` : ''}</div>`;
+}
+async function loadLastDisc(cid, id, key) {
+  lastDisc[key] = 'wait';
+  const { data, error } = await sb.rpc('cust_last_disc', { p_customer: cid, p_except: id === 'draft' ? null : id });
+  lastDisc[key] = error ? null : Object.fromEntries((data || []).map(r => [r.kind, r]));
+  if (S.drawerId === id) renderDrawer();
 }
 
 // طلب خصم من المندوب: نسبة تنطرح من صافي الربح (015)
 function discHTML(inv, dis) {
   if (!('disc_req' in inv)) return ''; // قبل ما تتشغل 015
-  return `<div class="term-box">${tog('طلب خصم', 'disc_req', inv.disc_req, dis)}
+  return `<div class="term-box">${tog('طلب خصم', 'disc_req', inv.disc_req, dis)}${lastDiscHTML(inv, 'disc', dis)}
     ${inv.disc_req ? `<div class="grid">${fld('نسبة الخصم المطلوبة %', 'disc_pct', inv.disc_pct, { type: 'number', req: true, dis, rer: true })}
       <div class="fld"><div class="help" style="margin-top:28px">مبلغ الخصم: <b>${money(num(inv.value) * discPct(inv) / 100)}</b><br>القيمة بعد الخصم: <b>${money(num(inv.value) * (1 - discPct(inv) / 100))}</b></div></div></div>` : ''}</div>`;
 }
@@ -454,9 +501,9 @@ export function renderDrawer() {
   </div>
   <div class="d-body">
     ${actionsHTML(inv)}
-    ${draft ? '' : `<details class="more" data-more="steps" ${shown.steps ? 'open' : ''}><summary>مراحل الطلب</summary>${stepsHTML(inv)}</details>`}
+    ${draft ? '' : sec('steps', 'مراحل الطلب', stepsHTML(inv))}
     ${draft ? '' : profitHTML(inv)}
-    <section class="blk"><h4>بيانات الطلب ${eb && !can('editValue', inv) ? `<span class="lock">${ic('lock')}للعرض فقط</span>` : ''}</h4>
+    ${sec('data', 'بيانات الطلب', `
       <div class="grid">
         ${customerFld(inv, eb)}
         ${fld('رقم عرض السعر', 'quote_no', inv.quote_no, { dis: qDis, help: xtraQuote(inv, qDis) ? 'اضغط حتى تختار من فواتير إكسترا' : '' })}
@@ -469,13 +516,15 @@ export function renderDrawer() {
           ${extra.pdfUrl ? `<a class="btn sm" href="${esc(extra.pdfUrl)}" target="_blank" rel="noopener noreferrer">فتح</a>` : ''}
           ${!eb ? `<label class="btn sm" for="pdfIn">${inv.pdf_path || inv.pdf_name ? 'تغيير' : 'رفع'}</label><input type="file" id="pdfIn" accept="application/pdf" class="hidden">` : ''}</div>
           <div class="help">الحد الأقصى 2 MB${draft && inv.pdf_name ? ' · ينرفع وياه من تحفظ الطلب' : ''}</div></div>
-      </div></section>
+      </div>`, { note: inv.value ? money(inv.value) : '', lock: eb && !can('editValue', inv) ? lockTag('للعرض فقط') : '',
+        open: inv.stage === 'new', force: draft || (S.lastMissing && S.lastMissing.id === inv.id && inv.stage === 'new') })}
     ${!draft && can('seeTerms', inv) ? termsHTML(inv) : ''}
-    ${draft ? '' : `<section class="blk"><h4>التعليقات</h4>
+    ${draft ? '' : sec('comments', 'التعليقات', `
       ${extra.comments.map(commentHTML).join('') || '<div class="help" style="margin-bottom:8px">لا توجد تعليقات</div>'}
-      <div class="add-c">${avatarHTML(S.ME, 30, 'c-av')}<textarea id="cIn" rows="1" data-mention="1" autocomplete="off" placeholder="اكتب تعليق... (@ حتى تذكر شخص · Shift+Enter سطر جديد)" aria-label="تعليق">${esc(cDrafts[S.drawerId] || '')}</textarea><button class="btn primary" id="cBtn">إرسال</button></div></section>
-    <details class="more blk" data-more="log" ${shown.log ? 'open' : ''}><summary>سجل الحركة${extra.log.length ? ` (${extra.log.length})` : ''}</summary>
-      <ul class="timeline">${extra.log.slice().reverse().map(l => `<li><div>${esc(userName(l.actor))}: ${esc(l.body)}</div><div class="t">${dt(l.at)}</div></li>`).join('') || '<li class="help">—</li>'}</ul></details>`}
+      <div class="add-c">${avatarHTML(S.ME, 30, 'c-av')}<textarea id="cIn" rows="1" data-mention="1" autocomplete="off" placeholder="اكتب تعليق... (@ حتى تذكر شخص · Shift+Enter سطر جديد)" aria-label="تعليق">${esc(cDrafts[S.drawerId] || '')}</textarea><button class="btn primary" id="cBtn">إرسال</button></div>`,
+      { note: extra.comments.length ? String(extra.comments.length) : '', open: true, force: !!cDrafts[S.drawerId] })}
+    ${draft ? '' : sec('log', 'سجل الحركة', `
+      <ul class="timeline">${extra.log.slice().reverse().map(l => `<li><div>${esc(userName(l.actor))}: ${esc(l.body)}</div><div class="t">${dt(l.at)}</div></li>`).join('') || '<li class="help">—</li>'}</ul>`, { note: extra.log.length ? String(extra.log.length) : '' })}
     ${draft ? '' : `<div id="saveBar" role="status" style="position:sticky;bottom:0;z-index:2;display:none;align-items:center;gap:8px;flex-wrap:wrap;margin:12px -4px 0;padding:10px 12px;background:var(--surface);border:1px solid var(--warn);border-radius:12px;box-shadow:0 -6px 18px rgb(0 0 0 / .18)">
       <span id="saveN" style="flex:1;min-width:0;color:var(--warn);font-weight:600"></span>
       <button class="btn sm" id="undoEdits">تراجع</button><button class="btn primary sm" id="saveEdits">${ic('check')}حفظ التعديلات</button></div>`}
@@ -688,6 +737,8 @@ export function initDrawer() {
     if (a) return dirty() ? toast('احفظ التعديلات أو تراجع عنها أول') : run(a.dataset.act, S.drawerId);
     if (e.target.closest('#saveEdits')) return saveEdits();
     if (e.target.closest('#undoEdits')) { clearPending(); renderDrawer(); return toast('انلغت التعديلات') }
+    const ld = e.target.closest('[data-lastdisc]');
+    if (ld) { const inv = getInv(S.drawerId), p = num(ld.dataset.pct); if (inv) stage(inv, ld.dataset.lastdisc === 'ld' ? { ld: true, ld_pct: p } : { disc_req: true, disc_pct: p }, true); return }
     if (e.target.closest('[data-costedit]')) { extra.costEdit = true; renderDrawer(); setTimeout(() => { const c = $('#f_cost'); c && c.focus() }, 30); return }
     const ce = e.target.closest('[data-cedit]'); if (ce) return editComment(+ce.dataset.cedit);
     const cd = e.target.closest('[data-cdel]'); if (cd) return deleteComment(+cd.dataset.cdel);
@@ -698,7 +749,15 @@ export function initDrawer() {
     if (e.target.id === 'f_quote_no') { const inv = getInv(S.drawerId); if (inv && xtraQuote(inv, e.target.disabled)) { e.target.blur(); openXtraBills(inv) } }
   });
   // نتذكر إذا المستخدم فتح "مراحل الطلب" أو "سجل الحركة"
-  d.addEventListener('toggle', e => { const k = e.target.dataset && e.target.dataset.more; if (k) shown[k] = e.target.open }, true);
+  d.addEventListener('toggle', e => {
+    const k = e.target.dataset && e.target.dataset.more; if (!k || shown[k] === e.target.open) return;
+    // الرسم من جديد ما يحسب: نخزن بس اللي يغيّره المستخدم بإيده
+    if (!e.target.dataset.user) return;
+    delete e.target.dataset.user;
+    shown[k] = e.target.open;
+    try { localStorage.setItem('ib_secs', JSON.stringify(shown)) } catch (_) { }
+  }, true);
+  d.addEventListener('click', e => { const s = e.target.closest('details.sec>summary'); if (s) s.parentElement.dataset.user = '1' });
   initSwipe(d);
   // Enter يرسل، Shift+Enter ينزل سطر (وأثناء كتابة العربي بلوحة IME ما نرسل)
   d.addEventListener('keydown', e => { if (e.target.id === 'cIn' && e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); addComment() } });

@@ -131,6 +131,7 @@
   let db;
   try { db = JSON.parse(store.get(KEY)) } catch (e) { db = null }
   if (!db || !db.invoices || !db.notifications || !db.v2) db = seed();
+  db.profiles.forEach(p => { p.xperms = p.xperms || []; p.nperms = p.nperms || [] });   // 025
   // الأدوار وصلاحياتها (018) — العرض يعرض المصفوفة ويحفظها، بس قواعده تبقى على الأدوار الأساسية
   if (!db.role_defs) db.role_defs = [
     { key: 'rep', name: 'مندوب', builtin: true, perms: ['create'], created_at: '2026-01-01' },
@@ -208,7 +209,12 @@
   const nextStep = cur => { const L = STEPS(), at = cur == null ? -1 : L.findIndex(e => e.k === cur); return (L.slice(at + 1).find(e => e.on !== false) || {}).k || null };
   const stepName = k => String((STEPS().find(e => e.k === k) || {}).n || '').trim() || { mgr: 'موافقة المدير', cust: 'رد الزبون', wh: 'المخزن' }[k] || k;
   const placeName = k => ({ new: 'طلب جديد', acc: 'الحسابات', cancel: 'ملغاة', done: 'تمت' })[k] || stepName(String(k).split(':')[1]);
-  const rolePerm = (uid, p) => { const u = db.profiles.find(x => x.id === uid); return !!u && u.active && db.role_defs.some(d => [...u.roles, ...(u.xroles || [])].includes(d.key) && d.perms.includes(p)) };
+  // 025: صلاحيات خاصة بالحساب فوگ أدواره
+  const rolePerm = (uid, p) => { const u = db.profiles.find(x => x.id === uid); return !!u && u.active && !(u.nperms || []).includes(p) && ((u.xperms || []).includes(p) || db.role_defs.some(d => [...u.roles, ...(u.xroles || [])].includes(d.key) && d.perms.includes(p))) };
+  // 025: حد الطارئ اليومي (بداية اليوم بتوقيت بغداد)
+  const dayStart = () => { const B = 3 * 3600e3; return Math.floor((Date.now() + B) / 864e5) * 864e5 - B };
+  const urgLimit = () => { if (has('admin')) return null; const r = db.app_settings.find(x => x.key === 'urgent_daily'); return +(r && r.value) || null };
+  const urgUsed = () => db.invoices.filter(i => i.urgent_by === session && new Date(i.urgent_at) >= dayStart()).length;
   // 023: طلبي كمندوب، أو صلاحية طلبات كل المندوبين
   const repMine = v => (has('rep') && v.rep_id === session) || rolePerm(session, 'rep_all');
   const hasPerm = p => has('admin') || rolePerm(session, p);
@@ -558,7 +564,17 @@
       if (!['new', 'acc', 'decision'].includes(v.stage)) throw new Error('الطلب مغلق');
       if (!(has('admin') || has('mgr') || repMine(v))) throw new Error('ما عندك صلاحية');
       if (!!v.urgent === !!p_on) return null;
+      const lim = urgLimit();
+      if (p_on && lim && !(v.urgent_by === session && new Date(v.urgent_at) >= dayStart()) && urgUsed() >= lim)
+        throw new Error(`وصلت الحد اليومي للطلبات الطارئة (${lim}) — حاول باچر أو راجع الأدمن`);
+      if (p_on) Object.assign(v, { urgent_at: iso(Date.now()), urgent_by: session });
       v.urgent = !!p_on; addLog(v.id, p_on ? 'أشّر الطلب طارئ' : 'شال علامة طارئ'); return null;
+    },
+    urgent_left() { const lim = urgLimit(); return lim ? Math.max(0, lim - urgUsed()) : null },
+    cust_last_disc({ p_customer, p_except }) {
+      const pick = (kind, on, k) => { const i = db.invoices.filter(x => x.customer_id === p_customer && x.id !== p_except && !x.deleted_at && x.stage !== 'cancel' && x[on] && +x[k] > 0)
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at) || b.id - a.id)[0]; return i ? [{ kind, pct: +i[k], invoice_id: i.id, at: i.created_at }] : [] };
+      return [...pick('disc', 'disc_req', 'disc_pct'), ...pick('ld', 'ld', 'ld_pct')];
     },
     inv_set_cost({ p_id, p_cost }) {
       const v = getInvFor(p_id);

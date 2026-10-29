@@ -1,7 +1,7 @@
 // Service worker: يخلي الموقع ينثبت كتطبيق ويفتح أسرع.
 // "الشبكة أولاً": دائماً ياخذ آخر نسخة، والمخزّن بس إذا ماكو إنترنت.
 // البيانات (Supabase) ما تنخزن هنا أبداً.
-const CACHE = 'invoices-v33-rep-all-refresh';
+const CACHE = 'invoices-v34-user-perms-viewas';
 const SHELL = [
   'assets/avatars/people-3d.webp', 'assets/avatars/pixel-3d.webp', 'assets/avatars/robot-3d.webp', 'assets/avatars/animal-3d.webp', 'assets/avatars/space-3d.webp',
   './', 'index.html', 'assets/app.css', 'manifest.webmanifest', 'icons/progress-48.png', 'icons/progress-512.png', 'icons/progress-maskable-512.png', 'icons/progress-apple-180.png', 'icons/progress-192.png',
@@ -9,7 +9,7 @@ const SHELL = [
   'assets/js/can.js', 'assets/js/actions.js', 'assets/js/auth.js', 'assets/js/board.js', 'assets/js/drawer.js',
   'assets/js/settings.js', 'assets/js/customers.js', 'assets/js/export.js', 'assets/js/backup.js',
   'assets/js/appearance.js', 'assets/brand/invoice-progress.png',
-  'assets/js/avatars.js', 'assets/js/avatar-art.js', 'assets/js/notifications.js', 'assets/js/mentions.js', 'assets/js/home.js', 'assets/js/ssel.js', 'assets/js/trash.js', 'assets/js/supervisor.js', 'assets/js/stars-data.js',
+  'assets/js/avatars.js', 'assets/js/avatar-art.js', 'assets/js/notifications.js', 'assets/js/mentions.js', 'assets/js/home.js', 'assets/js/ssel.js', 'assets/js/trash.js', 'assets/js/supervisor.js', 'assets/js/stars-data.js', 'assets/js/viewas.js',
 ];
 
 self.addEventListener('install', e => {
