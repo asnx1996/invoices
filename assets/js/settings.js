@@ -100,7 +100,8 @@ function generalHTML() {
       ${row('حد الطارئ اليومي', 'كم طلب يكدر كل مستخدم يأشره طارئ باليوم. فارغ أو 0 = بلا حد. الأدمن ما ينحسب عليه', `<input type="text" id="setUrg" inputmode="numeric" autocomplete="off" dir="ltr" value="${S.URGENT_DAILY || ''}" placeholder="بلا حد" aria-label="حد الطارئ اليومي">
         <button class="btn primary sm" id="setUrgBtn">حفظ</button>`)}
     </div>
-    <div class="set-card">${row('نسخة احتياطية', 'كل الجداول بملف Excel ينحفظ على جهازك', `<button class="btn sm" id="backupBtn">${ic('download')}نسخة احتياطية الآن</button>`)}</div>`;
+    <div class="set-card">${row('نسخة احتياطية', 'كل الجداول بملف Excel ينحفظ على جهازك', `<button class="btn sm" id="backupBtn">${ic('download')}نسخة احتياطية الآن</button>`)}</div>
+    ${admin() ? `<div class="set-card">${row('إيقاف كل الحسابات', `يوقف كل الحسابات (${S.PROFILES.filter(u => u.active && u.id !== S.ME.id).length} فعّال) ويطلعهم من أجهزتهم. حسابك انت يبقى. ترجع تفعّل أي واحد من المستخدمين`, `<button class="btn danger sm" id="stopAllBtn">إيقاف الكل</button>`)}</div>` : ''}`;
 }
 
 // ---------------------------------------------------------------- المستخدمين
@@ -458,6 +459,16 @@ export function initSettings() {
       S.URGENT_DAILY = v; return toast(v ? `صار الحد: ${v} طلب طارئ باليوم لكل مستخدم` : 'انشال حد الطارئ');
     }
     if (t.id === 'backupBtn') return backupNow();
+    if (t.id === 'stopAllBtn') {
+      const n = S.PROFILES.filter(u => u.active && u.id !== S.ME.id).length;
+      if (!n) return toast('ماكو حسابات فعّالة غير حسابك');
+      return ask('إيقاف كل الحسابات', [{ id: 'c', label: 'للتأكيد اكتب: ايقاف', type: 'text', req: true }], async v => {
+        if (v.c !== 'ايقاف') return toast('ما انكتبت كلمة التأكيد صح');
+        const { error } = await sb.from('profiles').update({ active: false }).eq('active', true).neq('id', S.ME.id);
+        if (error) toast(error.message); else toast(`انوقفت ${n} حسابات وطلعوا من كل أجهزتهم`);
+        refreshUsers();
+      }, { okText: 'إيقاف الكل', danger: true, msg: `راح يتوقف ${n} حساب ويطلعون من الموقع هسه. حسابك انت يبقى شغال.` });
+    }
     // المستخدمين
     if (t.id === 'addUserBtn') return addUser();
     if (d.uopen) { openUser = openUser === d.uopen ? null : d.uopen; paint(); const b = $(`[data-uopen="${CSS.escape(d.uopen)}"]`); b && b.focus({ preventScroll: true }); return }
